@@ -1,0 +1,14 @@
+name: usfs-workshop
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - ipyleaflet
+  - ipywidgets
+  - pandas
+  - numpy
+  - gdal
+  - numpy
+  - matplotlib
+  - requests

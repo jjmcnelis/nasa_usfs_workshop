@@ -6,9 +6,8 @@ dependencies:
   - python
   - ipyleaflet
   - ipywidgets
+  - geopandas
   - pandas
-  - numpy
-  - gdal
   - numpy
   - matplotlib
   - requests

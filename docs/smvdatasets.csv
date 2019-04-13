@@ -1,0 +1,31 @@
+Column fieldname,Description,Units
+SoilSCAPE_surface,Mean volumetric (%) soil moisture at 0-5 cm soil depth,m3/m3
+SoilSCAPE_rootzone,Mean volumetric (%) soil moisture at 0-100 cm soil depth,m3/m3
+AirMOSS_in-ground_surface,Mean volumetric (%) soil moisture at 0-5 cm soil depth,m3/m3
+AirMOSS_in-ground_rootzone,Mean volumetric (%) soil moisture at 0-100 cm soil depth,m3/m3
+COSMOS_surface,Mean volumetric (%) soil moisture at 0-5 cm soil depth,m3/m3
+COSMOS_rootzone,Mean volumetric (%) soil moisture at 0-100 cm soil depth,m3/m3
+AirMOSS_L2_3_surface,Mean volumetric (%) soil moisture at 0 cm soil depth,m3/m3
+AirMOSS_L2_3_rootzone,Mean volumetric (%) soil moisture at 0-30cm soil depth,m3/m3
+AirMOSS_L4_rootzone,Mean volumetric (%) soil moisture at 0-100cm soil depth,m3/m3
+SMAP_surface,Mean volumetric (%) soil moisture at 0-5cm soil depth,m3/m3
+SMAP_rootzone,Mean volumetric (%) soil moisture at 0-100cm soil depth,m3/m3
+NEE_mean,Mean Net Ecosystem Exchange value,g C m-2d-1
+GPP_mean,Mean Gross Primary Productivity value,g C m-2d-1
+GRACE_surface_pctl,Surface soil moisture percentile,%
+GRACE_rootzone_pctl,Root zone soil moisture percentile,%
+SCAN_surface,Mean volumetric (%) soil moisture at 0-5cm soil depth,m3/m3
+SCAN_rootzone,Mean volumetric (%) soil moisture at 0-40cm soil depth,m3/m3
+SNOTEL_surface,Mean volumetric (%) soil moisture at 0-5cm soil depth,m3/m3
+SNOTEL_rootzone,Mean volumetric (%) soil moisture at 0-40cm soil depth,m3/m3
+CRN_surface,Mean volumetric (%) soil moisture at 0-5cm soil depth,m3/m3
+CRN_rootzone,Mean volumetric (%) soil moisture at 0-100cm soil depth,m3/m3
+FLUXNET_surface,Mean volumetric (%) soil moisture (upper layer),m3/m3
+FLUXNET_rootzone,Mean volumetric (%) soil moisture (upper & lower layer),m3/m3
+prcp,Precipitation for 1 km x 1 km grid (Daymet),mm/day
+tmax,Maximum daily temperature for 1 km x 1 km grid (Daymet),degrees C
+tmin,Minimum daily temperature for 1 km x 1 km grid (Daymet),degrees C
+ET,Evapotranspiration (MODIS),mm/8day
+LST_Day,Land Surface Temperature Day (MODIS),K/8day
+LST_Night,Land Surface Temperature Night (MODIS),K/8day
+EVI,16 days Enhanced Vegetation Index (MODIS),

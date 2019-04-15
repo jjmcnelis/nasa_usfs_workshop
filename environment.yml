@@ -4,10 +4,13 @@ channels:
   - defaults
 dependencies:
   - python
+  - pandas
+  - numpy
+  - requests
+  - xarray
   - ipyleaflet
   - ipywidgets
   - geopandas
-  - pandas
-  - numpy
+  - shapely
   - matplotlib
-  - requests
+  

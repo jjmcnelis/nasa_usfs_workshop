@@ -1,31 +1,31 @@
-Column fieldname,Description,Units
-SoilSCAPE_surface,Mean volumetric (%) soil moisture at 0-5 cm soil depth,m3/m3
-SoilSCAPE_rootzone,Mean volumetric (%) soil moisture at 0-100 cm soil depth,m3/m3
-AirMOSS_in-ground_surface,Mean volumetric (%) soil moisture at 0-5 cm soil depth,m3/m3
-AirMOSS_in-ground_rootzone,Mean volumetric (%) soil moisture at 0-100 cm soil depth,m3/m3
-COSMOS_surface,Mean volumetric (%) soil moisture at 0-5 cm soil depth,m3/m3
-COSMOS_rootzone,Mean volumetric (%) soil moisture at 0-100 cm soil depth,m3/m3
-AirMOSS_L2_3_surface,Mean volumetric (%) soil moisture at 0 cm soil depth,m3/m3
-AirMOSS_L2_3_rootzone,Mean volumetric (%) soil moisture at 0-30cm soil depth,m3/m3
-AirMOSS_L4_rootzone,Mean volumetric (%) soil moisture at 0-100cm soil depth,m3/m3
-SMAP_surface,Mean volumetric (%) soil moisture at 0-5cm soil depth,m3/m3
-SMAP_rootzone,Mean volumetric (%) soil moisture at 0-100cm soil depth,m3/m3
-NEE_mean,Mean Net Ecosystem Exchange value,g C m-2d-1
-GPP_mean,Mean Gross Primary Productivity value,g C m-2d-1
-GRACE_surface_pctl,Surface soil moisture percentile,%
-GRACE_rootzone_pctl,Root zone soil moisture percentile,%
-SCAN_surface,Mean volumetric (%) soil moisture at 0-5cm soil depth,m3/m3
-SCAN_rootzone,Mean volumetric (%) soil moisture at 0-40cm soil depth,m3/m3
-SNOTEL_surface,Mean volumetric (%) soil moisture at 0-5cm soil depth,m3/m3
-SNOTEL_rootzone,Mean volumetric (%) soil moisture at 0-40cm soil depth,m3/m3
-CRN_surface,Mean volumetric (%) soil moisture at 0-5cm soil depth,m3/m3
-CRN_rootzone,Mean volumetric (%) soil moisture at 0-100cm soil depth,m3/m3
-FLUXNET_surface,Mean volumetric (%) soil moisture (upper layer),m3/m3
-FLUXNET_rootzone,Mean volumetric (%) soil moisture (upper & lower layer),m3/m3
-prcp,Precipitation for 1 km x 1 km grid (Daymet),mm/day
-tmax,Maximum daily temperature for 1 km x 1 km grid (Daymet),degrees C
-tmin,Minimum daily temperature for 1 km x 1 km grid (Daymet),degrees C
-ET,Evapotranspiration (MODIS),mm/8day
-LST_Day,Land Surface Temperature Day (MODIS),K/8day
-LST_Night,Land Surface Temperature Night (MODIS),K/8day
-EVI,16 days Enhanced Vegetation Index (MODIS),
+dataset,source,type,units,description,soil_zone,soil_depth,native_res,time_coverage
+SoilSCAPE_surface,SoilSCAPE,in situ,m3/m3,Mean vol (%) soil moisture at 0-5 cm ,surface,"5, 20, 50 cm",point,2011-present
+SoilSCAPE_rootzone,SoilSCAPE,in situ,m3/m3,Mean vol (%) soil moisture at 0-100 cm ,rootzone,"5, 20, 50 cm",point,2011-present
+AirMOSS_in-ground_surface,AirMOSS,in situ,m3/m3,Mean vol (%) soil moisture at 0-5 cm ,surface,"2, 5, 10, 20, 40, 60, 80 cm",point,2012-2015
+AirMOSS_in-ground_rootzone,AirMOSS,in situ,m3/m3,Mean vol (%) soil moisture at 0-100 cm ,rootzone,"2, 5, 10, 20, 40, 60, 80 cm",point,2012-2015
+COSMOS_surface,COSMOS,in situ,m3/m3,Mean vol (%) soil moisture at 0-5 cm ,surface,0-30 cm,point,2008-present
+COSMOS_rootzone,COSMOS,in situ,m3/m3,Mean vol (%) soil moisture at 0-100 cm ,rootzone,0-30 cm,point,2008-present
+AirMOSS_L2_3_surface,AirMOSS,airborne,m3/m3,Mean vol (%) soil moisture at 0 cm ,surface,"0, 10, 30 cm",90-m,2012-2015
+AirMOSS_L2_3_rootzone,AirMOSS,airborne,m3/m3,Mean vol (%) soil moisture at 0-30cm ,rootzone,"0, 10, 30 cm",90-m,2012-2015
+AirMOSS_L4_rootzone,AirMOSS,airborne,m3/m3,Mean vol (%) soil moisture at 0-100cm ,rootzone,"0-10, 10-40, 40-100 cm",90-m,2012-2015
+SMAP_surface,SMAP,spaceborne,m3/m3,Mean vol (%) soil moisture at 0-5cm ,surface,"0-5, 0-100 cm",9000-m ,2015-present
+SMAP_rootzone,SMAP,spaceborne,m3/m3,Mean vol (%) soil moisture at 0-100cm ,rootzone,"0-5, 0-100 cm",9000-m ,2015-present
+NEE_mean,SMAP,spaceborne,g m-2 d-1,Mean Net Ecosystem Exchange value,NA,NA,9000-m ,2015-present
+GPP_mean,SMAP,spaceborne,g m-2 d-1,Mean Gross Primary Productivity value,NA,NA,9000-m ,2015-present
+GRACE_surface_pctl,GRACE,spaceborne,%,Surface soil moisture percentile,NA,"0-2, 0-100 cm",0.125-d,2002-present
+GRACE_rootzone_pctl,GRACE,spaceborne,%,Root zone soil moisture percentile,NA,"0-2, 0-100 cm",0.125-d,2002-present
+SCAN_surface,SCAN,in situ,m3/m3,Mean vol (%) soil moisture at 0-5cm ,surface,"2, 4, 8, 20, 40 cm",point,1996-present
+SCAN_rootzone,SCAN,in situ,m3/m3,Mean vol (%) soil moisture at 0-40cm ,rootzone,"2, 4, 8, 20, 40 cm",point,1996-present
+SNOTEL_surface,SNOTEL,in situ,m3/m3,Mean vol (%) soil moisture at 0-5cm ,surface,"2, 4, 8, 20, 40 cm",point,1996-present
+SNOTEL_rootzone,SNOTEL,in situ,m3/m3,Mean vol (%) soil moisture at 0-40cm ,rootzone,"2, 4, 8, 20, 40 cm",point,1996-present
+CRN_surface,CRN,in situ,m3/m3,Mean vol (%) soil moisture at 0-5cm ,surface,"5, 10, 20, 50, 100 cm",point,2009-present
+CRN_rootzone,CRN,in situ,m3/m3,Mean vol (%) soil moisture at 0-100cm ,rootzone,"5, 10, 20, 50, 100 cm",point,2009-present
+FLUXNET_surface,FLUXNET,in situ,m3/m3,Mean vol (%) soil moisture (upper),surface,0-100 cm,point,1996-present
+FLUXNET_rootzone,FLUXNET,in situ,m3/m3,Mean vol (%) soil moisture (upper & lower),rootzone,0-100 cm,point,1996-present
+prcp,Daymet,other,mm/day,Precipitation for 1 km x 1 km grid,NA,NA,1000-m,2000-present
+tmax,Daymet,other,degrees C,Maximum daily temperature for 1x1-km grid,NA,NA,1000-m,2000-present
+tmin,Daymet,other,degrees C,Minimum daily temperature for 1x1-km grid,NA,NA,1000-m,2000-present
+ET,MODIS,other,mm/8day,Evapotranspiration,NA,NA,500-m,2001-present
+LST_Day,MODIS,other,K/8day,Land Surface Temperature Day,NA,NA,1000-m,2000-present
+LST_Night,MODIS,other,K/8day,Land Surface Temperature Night,NA,NA,1000-m,2000-present
+EVI,MODIS,other,unitless,16 days Enhanced Vegetation Index,NA,NA,250-m,2000-present

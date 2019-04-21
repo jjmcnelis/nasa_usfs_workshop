@@ -1,5 +1,6 @@
 import os                            # core py3 
 import json
+import warnings
 from io import StringIO
 
 import requests                      # data
@@ -9,42 +10,59 @@ import xarray as xr
 from shapely.geometry import shape
 
 import ipyleaflet as mwg
-from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML
-from ipyleaflet import Map, LayerGroup, GeoJSON, CircleMarker
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from IPython.display import display
+from ipyleaflet import Map, LayerGroup, GeoJSON, CircleMarker
+from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML
 
 
-url = "https://daac.ornl.gov/cgi-bin/viz/download.pl?" # SMV
-auth = dict(ORNL_DAAC_USER_NUM=str(32863))             # Jack
-hstyle = {"color": "white", "fillOpacity": 0.6}
-smvds = pd.read_csv("docs/smvdatasets.csv", index_col="dataset", header=0)
+# usfs shapefile fields - delete
+fields = [
+    "FORESTNUMB",
+    "DISTRICTNU",
+    "REGION",
+    "GIS_ACRES",
+	"MIN",
+	"MEDIAN",
+	"MAX",
+	"RANGE",
+	"SUM",
+	"VARIETY",
+	"MINORITY",
+	"MAJORITY",
+	"COUNT"
+]
+
+site_details = """
+{FORESTNAME} ({FORESTNUMB})
+{DISTRICTNA} ({DISTRICTNU})
+REGION:   {REGION}
+ACRES:    {GIS_ACRES}
+MIN:      {MIN}
+MEDIAN:   {MEDIAN}
+MAX:      {MAX}
+RANGE:    {RANGE}
+SUM:      {SUM}
+VARIETY:  {VARIETY}
+MINORITY: {MINORITY}
+MAJORITY: {MAJORITY}
+COUNT:    {COUNT}
+"""
 
 # ----------------------------------------------------------------------------
-# widgets
+# app settings
 
-basemap = mwg.basemap_to_tiles(mwg.basemaps.Esri.WorldImagery)
-polys = LayerGroup()
-points = LayerGroup()
+warnings.filterwarnings('ignore')
+auth = dict(ORNL_DAAC_USER_NUM=str(32863))
+smv_download = "https://daac.ornl.gov/cgi-bin/viz/download.pl?"
+smv_datasets = pd.read_csv(
+    "docs/smvdatasets.csv", 
+    index_col="dataset", 
+    header=0)
 
 map_center = (32.75, -109)
-mapw = Map(
-    layers=(basemap, polys, points,), 
-    center=map_center, 
-    zoom=7, 
-    scroll_wheel_zoom=True)
-
-submit = Button( 
-    description='Submit', 
-    disabled=True, 
-    button_style='success')
-
-progress = IntProgress(
-    description="Progress: ", 
-    layout=Layout(width="95%"))
-
-ui = VBox([mapw, HBox([submit, progress])])
+basemap = mwg.basemap_to_tiles(mwg.basemaps.Esri.WorldImagery)
 
 # ----------------------------------------------------------------------------
 # ease grid
@@ -55,15 +73,6 @@ lonf = "docs/EASE2_M09km.lons.3856x1624x1.double"
 lats = np.fromfile(latf, dtype=np.float64).flatten() 
 lons = np.fromfile(lonf, dtype=np.float64).flatten()
 crds = np.dstack((lats,lons))[0]
-crds
-
-def get_ease(geom):
-    """ """
-    bnds = geom.bounds 
-    ease = crds[(bnds[1]<lats)&(lats<bnds[3])&(bnds[0]<lons)&(lons<bnds[2])]
-    pt = lambda p: shape({"coordinates": p, "type": "Point"})
-    inpoly = [[p[0],p[1]] for p in ease if geom.contains(pt([p[1], p[0]]))]
-    return(inpoly)
 
 
 # ----------------------------------------------------------------------------
@@ -74,6 +83,7 @@ def txt_to_pd(response_text):
     """Parses response.text to data frame with date index."""
     
     f = StringIO(response_text)                      # get file from string
+
     df = pd.read_csv(f, header=4, index_col="time")  # read to df
     df.index = pd.to_datetime(df.index)              # convert index to dates
     
@@ -86,7 +96,7 @@ def split_pd(col):
     df = col.str.split(";",n=2,expand=True)           # split col by ;
     df = df.replace('', np.nan)                       # set '' to nan
     df = df.astype(float)                             # set all to float
-    df.columns = ["mean","min","max"]                 # add column names
+    df.columns = ["Mean","Min","Max"]                 # add column names
     
     return(df)
 
@@ -107,8 +117,9 @@ lonatts = dict(
 
 def pd_to_xr(dataset, df):
     """Makes an xr.Dataset from a pandas column (series) and coords."""
-    
-    a = smvds.loc[dataset].to_dict()
+
+    a = smv_datasets.loc[dataset].to_dict()
+
     x = xr.DataArray(df, name=dataset, attrs=a)
     x = x.rename(dict(dim_1="stat"))
     x.attrs["allnan"] = int(np.isnan(np.nanmean(x.data)))
@@ -119,14 +130,18 @@ def pd_to_xr(dataset, df):
 def get_sample_xr(samp):
     """ """
 
-    d = ["sample"]                          # get sample, lat, lon xr arrays
-    s = xr.DataArray(data=[samp.id], dims=d)
+    d = ["sample"]                          
+    s = xr.DataArray(data=[samp.id], dims=d) # get sample, lat, lon xr arrays
     y = xr.DataArray(data=[samp.lat], coords=[s], dims=d, attrs=latatts)
     x = xr.DataArray(data=[samp.lon], coords=[s], dims=d, attrs=lonatts)
 
     df = samp.df                                         # get the sample df
-    dfs = {col: split_pd(df[col]) for col in df.columns} # split cols to dfs
-    ds = {c: pd_to_xr(c,d) for c,d in dfs.items()}       # make xr datasets
+    ds = {}
+    for dataset in df.columns:
+        if "FLUXNET" not in dataset:
+            split_column = split_pd(df[dataset])
+            ds[dataset] = pd_to_xr(dataset, split_column)
+
     xds = xr.merge(ds.values())                          # merge to one xr
     xds = xds.assign_coords(lat=y, lon=x)                # add coord arrays
     
@@ -136,171 +151,319 @@ def get_sample_xr(samp):
 # ----------------------------------------------------------------------------
 url = "https://daac.ornl.gov/cgi-bin/viz/download.pl?"
 
-pt_style = dict(radius=7, fill_opacity=0.6, fill_color="black", stroke=False)
-pt_status_on = dict(stroke=True, color="white", opacity=0.6)
-pt_status_off = dict(stroke=False, color="black", opacity=0.6)
+pt_style = dict(
+    radius=7, 
+    stroke=False,
+    fill_opacity=0.6, 
+    fill_color="black")
 
 
 class Sample(object):
 
+
     def __init__(self, i, lat, lon):
         """Inits with id,lat,lon; makes request string, map point."""
-        self.id, self.lat, self.lon = i, lat, lon
-        self.rurl = url+"lt={0}&ln={1}&d=smap".format(lat,lon)  # request url
-        self.pt = CircleMarker(location=(lat, lon), **pt_style) # map point
-        self.on = False                                         # status
+        
+        self.id = i
+        self.lat = lat 
+        self.lon = lon
+
+        self.on = False # on/off status user toggle
+        self.pt = CircleMarker(location=(lat, lon), **pt_style)
+        self.download = url + "lt={0}&ln={1}&d=smap".format(lat, lon)    
+
 
     def update(self, **kwargs):
         for arg, val in kwargs.items():
             setattr(self.pt, arg, val)
-    
+
+
     def toggle(self, event, type, coordinates):
-        opac = 0.1 if self.on else 0.6
-        self.update(opacity=opac)
-        self.on = False if self.on else True
         
+        opac = 0.1 if self.on else 0.6             # determine opacity
+        self.update(opacity=opac)                  # set opacity
+        self.on = False if self.on else True       # toggle status
+
+
     def submit(self):
         """Called by parent. Downloads url. Updates status."""
-        self.response = requests.get(self.rurl, cookies=auth)  # submit SMV 
-        self.df = txt_to_pd(self.response.text)                # read to df
-        self.xr = get_sample_xr(self)                          # get xr
-        self.pt.on_click(self.toggle)                          # callback
-        self.on = True                                         # toggle on
+        
+        self.response = requests.get(self.download, cookies=auth) # dl SMV 
+        self.df = txt_to_pd(self.response.text)    # read to df
+        self.xr = get_sample_xr(self)              # get xr dataset
+        self.pt.on_click(self.toggle)              # callback switch style
+        self.on = True                             # toggle status on
 
 
 # ----------------------------------------------------------------------------
-# app classes
-
-lyr_style = lambda c: {"color":c,"fillColor":c,"weight":1,"fillOpacity": 0.4}
-lyr_hstyle = {"color": "white", "fillOpacity": 0.8}
-statcheck = lambda k: k.split("_")[0] not in ["MEAN","STD","Count", "style"]
+# usfs data
 
 
-def mgeo(i, feat, col):
+def get_ease(shapely_geom):
+    """ """
+
+    bnds = shapely_geom.bounds 
+    ease = crds[
+        (bnds[1]<lats) & (lats<bnds[3]) &     # ybnds < lat < ybnds
+        (bnds[0]<lons) & (lons<bnds[2])]      # xbnds < lon < xbnds
+
+    ease_reduced = []
+    for p in ease:
+        shapely_pt = shape({                  # input to shapely.shape is a
+            "type": "Point",                  # python dict equivalent of
+            "coordinates": (p[1], p[0])})     # geojson point geometry
+        
+        if shapely_geom.contains(shapely_pt): # if point inside poly
+            ease_reduced.append([p[0], p[1]]) # return lat, lon tuple
+
+    return(ease_reduced)
+
+
+def get_layer_data(i, feat, col, fields=["FID"]):
+    """ """
+
+    shapely_geom = shape(feat["geometry"])    # shapely geom
+    ease = get_ease(shapely_geom)             # ease grid points
+    cent = shapely_geom.centroid              # centroid
+    lat = cent.y                              # lat, lon
+    lon = cent.x
+
+    details, mean, std = {}, {}, {}
+    for key, value in feat["properties"].items():
+        if key in fields:
+            details[key] = value
+        elif "MEAN" in key:
+            mean[key] = value
+        elif "STD" in key:
+            std[key] = value
+        else:
+            pass
+
+    stats = pd.DataFrame({
+        "mean": mean, 
+        "std": std})
+
     feat["properties"].update({
         "id": i, 
-        "style": lyr_style(col)})
-    return(dict(data=feat, hover_style=lyr_hstyle))
+        "style": {
+            "weight": 1,
+            "color": col,
+            "fillColor": col,
+            "fillOpacity": 0.4}})
+
+    return((feat, ease, lat, lon, stats, details))
 
 
 class Layer(object):
 
+
     def __init__(self, i, feat, col=None):
         """Inits with id,lat,lon; makes request string, map point."""
+        
+        layer_data = get_layer_data(i, feat, col)
+        
         self.id = i
-        self.feat = feat
-        
-        self.sgeom = shape(feat["geometry"])
-        self.ease = get_ease(self.sgeom)                    # get ease points
-        self.cent = self.sgeom.centroid                     # get centroid
-        self.lat, self.lon = self.cent.y, self.cent.x       # get lat, lon
-        
-        prop = feat["properties"]
-        mean = [v for k,v in prop.items() if "MEAN" in k]
-        std = [v for k,v in prop.items() if "STD" in k]
-        self.stats = pd.DataFrame({"mean": mean, "std": std})
-        self.site = {k:v for k,v in prop.items() if statcheck(k)}
-        
-        lyr = mgeo(i, feat, col)
-        self.layer = GeoJSON(**lyr)
+        self.feat = layer_data[0]
+        self.ease = layer_data[1]
+        self.lat = layer_data[2]
+        self.lon = layer_data[3]
+        self.stats = layer_data[4]
+        self.details = layer_data[5]
+
+        self.layer = GeoJSON(
+            data=self.feat,
+            hover_style={
+                "color": "white", 
+                "fillOpacity": 0.8})
         self.layer.on_click(self.toggle)
 
-        self.on, self.dl = False, False                    # on/off, dl status
+        self.dl = False    # downloaded or nah?
+        self.on = False    # toggle on or nah?
+
+
+    def toggle(self, **kwargs):
+        """Routine for when a new USFS polygon is selected."""
+
+        if list(kwargs.keys()) != ['event', 'properties']: # check event
+            return(None)                                   # skip basemap
         
+        self.on = False if self.on else True               # update status
+        
+
     def update(self, **kwargs):
         for arg, val in kwargs.items():
             setattr(self.layer, arg, val)
-    
-    def toggle(self, **kwargs):
-        """Routine for when a new USFS polygon is selected."""
-        if list(kwargs.keys()) != ['event', 'properties']: # check event
-            return(None)                                   # skip basemap
-        self.on = False if self.on else True               # update status
 
 
 # ----------------------------------------------------------------------------
-# callbacks
-
-prog = lambda m: dict(min=0, max=m, value=0)
-xrds = lambda l: xr.concat([s.xr for s in l], "sample")
+# colors
 
 
-def get_on_lyrs(column=None):
-    """
-    Returns a subset of layers df, only "on" layers. If keyword 
-    argument 'column' will return only that column.
-    """
-    on = [i for i,row in layers.iterrows() if row["layer"].on]
-    sdf = layers.iloc[on][column] if column else layers.iloc[on]
-    return(sdf)
+def get_colors(n, cmap=cm.Set3):
+    """ """
 
+    cspace = np.linspace(0.0, 1.0, n)           # 1
+    rgb = cmap(cspace)                          # 2
+    cols = [colors.to_hex(c[0:3]) for c in rgb] # 3
 
-def submit_handler(b):
-    """Resets UI and sends requests to SMV when new submit."""
-    
-    lyron = get_on_lyrs()
-    for i, row in lyron.iterrows():             # loop over samples col
-        if not row["layer"].dl:                 # if not downloaded yet
-            samp = row.samples["samp"].tolist() # get samples
-            for a,v in prog(len(samp)).items(): # reset progress bar
-                setattr(progress, a, v)
-            for s in samp:                      # loop over sample pts
-                progress.value += 1             # update progress bar
-                s.update(**pt_status_on)        # update style
-                s.submit()                      # download the data
-            layers.at[i,"xr"] = xrds(samp)      # make xr dataset
-            row["layer"].dl = True              # set dl status to True
-    submit.disabled = True                      # disable submit button
-
-submit.on_click(submit_handler)
-
-
-def layer_click_handler(**kwargs): 
-    """
-    Routine for when a new USFS polygon is selected. Layer.toggle
-    internal updater should evaluate first.
-    """
-    if list(kwargs.keys()) != ['event', 'properties']: # check event
-         return(None)                         # skip basemap
-    i = int(kwargs["properties"]["id"])       # set selected poly id
-    l = layers.iloc[i]                        # get row for selected
-    lo = l.layer                              # get Layer class inst
-    pteval = points.add_layer if lo.on else points.remove_layer
-    pteval(l["points"])                       # update layer status;
-    submit.disabled = True if len(get_on_lyrs())==0 else False
-    if lo.on:
-        mapw.center, mapw.zoom = (lo.lat,lo.lon), 9 # ctr,zoom map
+    return(cols)
 
 
 # ----------------------------------------------------------------------------
-# data prep
+# app
 
-with open("sites/Sites_lf_geo.json", "r") as f:
-    shapes = json.load(f)
+pt_status_on = dict(
+    opacity=0.5,
+    stroke=True, 
+    color="white")
 
-features = shapes["features"]
+pt_status_off = dict(
+    opacity=0.6,
+    stroke=False, 
+    color="black")
 
-cspace = np.linspace(0.0, 1.0, len(features)) # 1
-rgb = cm.Set3(cspace)                         # 2
-cols = [colors.to_hex(c[0:3]) for c in rgb]   # 3
+sample_header = [
+    "id",
+    "lat",
+    "lon",
+    "samp"
+]
 
-sample_header = ["id","lat","lon","samp"]
-layer_header = ["id","lat","lon","layer","samples","points","xr"]
+layer_header = [
+    "id",
+    "lat",
+    "lon",
+    "layer",
+    "samples",
+    "points",
+    "xr"
+]
 
-layers = []                                   # a temporary list 
-for i, feat in enumerate(features):           # loops over USFS poly feats
-    
-    poly = Layer(i, feat, cols[i])            # get Layer class
-    poly.layer.on_click(layer_click_handler)  # set global callback
-    polys.add_layer(poly.layer)               # add to polys layer group
 
-    pts, samps = LayerGroup(), []             # points layer group; Samples
-    for j, p in enumerate(poly.ease):         # loop over EASE grid pts
-        s = Sample(j, p[0], p[1])             # make a Sample instance
-        pts.add_layer(s.pt)                   # add to points layer group
-        samps.append((j, p[0], p[1], s))      # append tuple to the list  
+class JupyterSMV(object):
+    """App."""
+
+
+    def __init__(self):
+
+        self.polys = LayerGroup()
+        self.points = LayerGroup()
+        self.mapw = Map(
+            layers=(basemap, self.polys, self.points,), 
+            center=(32.75, -109), 
+            zoom=7, 
+            scroll_wheel_zoom=True)
+
+        # widgets/ui
+        self.submit = Button( 
+            description="Submit", 
+            disabled=True, 
+            button_style="success")
+        self.submit.on_click(self.submit_handler)
+
+        self.progress = IntProgress(
+            description="Progress: ", 
+            layout=Layout(width="95%"))
+
+        # self.out = Output(
+        #     layout=Layout(dict(
+        #         width="30%", 
+        #         height="400px", 
+        #         overflow_y="scroll", 
+        #         overflow_x="hidden", 
+        #         border="1px solid gray")))
+
+        self.ui = VBox([
+            self.mapw, 
+            HBox([self.submit, self.progress])])
+
+
+    def geojson(self, g="sites/Sites_lf_geo.json"):
+        """ """
+
+        with open(g, "r") as f:
+            shapes = json.load(f)
         
-    samps = pd.DataFrame(samps, columns=sample_header)       # samples df
-    layers.append((i,poly.lat,poly.lon,poly,samps,pts,None)) # append
-    
-layers = pd.DataFrame(layers, columns=layer_header)          # layers df
+        features = shapes["features"]
+        n = len(features)
+        cols = get_colors(n)
+
+        layers = []                                   # a temporary list 
+        for i, feat in enumerate(features):           # loop over features
+            
+            poly = Layer(i, feat, cols[i])            # get Layer class
+            poly.layer.on_click(self.layer_click_handler)  # set global callback
+            self.polys.add_layer(poly.layer)          # add to poly grp
+
+            pts, samps = LayerGroup(), []             # points group; Samples
+            for j, p in enumerate(poly.ease):         # loop EASE grid pts
+                s = Sample(j, p[0], p[1])             # make Sample instance
+                pts.add_layer(s.pt)                   # add to points group
+                samps.append((j, p[0], p[1], s))      # append tuple to list  
+                
+            samps = pd.DataFrame(samps, columns=sample_header)       # samples
+            layers.append((i,poly.lat,poly.lon,poly,samps,pts,None)) # append
+        
+        self.layers = pd.DataFrame(layers, columns=layer_header)     # layers
+        #cent = self.layers[["lat","lon"]]
+
+
+    def submit_handler(self, b):
+        """Resets UI and sends requests to SMV when new submit."""
+        
+        on = self.get_on_lyrs()
+        for ix, row in on.iterrows():                      # loop over samples col
+            if not row["layer"].dl:                        # if not downloaded
+                sample = row.samples["samp"].tolist()      # get samples
+
+                self.progress.min = 0                 # reset progress bar
+                self.progress.max = len(sample)
+                self.progress.value = 0
+                
+                for s in sample:                           # loop over sample pts
+                    self.progress.value += 1                    # update progress bar
+                    s.update(**pt_status_on)               # update style
+                    s.submit()                             # download the data
+                
+                xrds = xr.concat([s.xr for s in sample], "sample")
+                self.layers.at[ix,"xr"] = xrds             # make xr dataset
+                row["layer"].dl = True                     # set dl status to True
+        
+        self.submit.disabled = True                             # disable submit button
+
+
+    def layer_click_handler(self, **kwargs): 
+        """ Evaluates when new polygon is selected. Layer.toggle first!"""
+        
+        if list(kwargs.keys()) != ['event', 'properties']: # check event
+            return(None)                                  # skip basemap
+
+        i = int(kwargs["properties"]["id"])                # get selected poly id
+        layer_row = self.layers.iloc[i]                         # get row for selected
+        layer_inst = layer_row.layer                       # get Layer class inst
+
+        if layer_inst.on:
+            self.points.add_layer(layer_row["points"]) 
+            self. mapw.center = (layer_inst.lat, layer_inst.lon)
+            self.mapw.zoom = 9
+        else:
+            self.points.remove_layer(layer_row["points"]) 
+        
+        self.submit.disabled = True if len(self.get_on_lyrs())==0 else False
+
+
+    def get_on_lyrs(self, column=None):
+        """Returns a subset (or column) of layers df, only "on" layers."""
+
+        on = []
+        for ix, row in self.layers.iterrows():
+            if row["layer"].on:
+                on.append(ix)
+        df = self.layers.iloc[on][column] if column else self.layers.iloc[on]
+
+        return(df)
+
+    # def update_output(self):
+    #    out.clear_output()
+    #    with out:
+    #        print(site_details.format(**lo.site))

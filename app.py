@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from IPython.display import display
 from ipyleaflet import Map, LayerGroup, GeoJSON, CircleMarker
-from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML
+from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML, interactive
 
 
 # usfs shapefile fields - delete
@@ -96,7 +96,7 @@ def split_pd(col):
     df = col.str.split(";",n=2,expand=True)           # split col by ;
     df = df.replace('', np.nan)                       # set '' to nan
     df = df.astype(float)                             # set all to float
-    df.columns = ["Mean","Min","Max"]                 # add column names
+    df.columns = ["Max","Mean","Min"]                 # add column names
     
     return(df)
 
@@ -228,20 +228,19 @@ def get_layer_data(i, feat, col, fields=["FID"]):
     lat = cent.y                              # lat, lon
     lon = cent.x
 
-    details, mean, std = {}, {}, {}
+    details, stats = {}, {"GPP_mean": [], "GPP_std": []}
     for key, value in feat["properties"].items():
         if key in fields:
             details[key] = value
-        elif "MEAN" in key:
-            mean[key] = value
-        elif "STD" in key:
-            std[key] = value
+        elif "MEAN_" in key:
+            stats["GPP_mean"].append(value)
+        elif "STD_" in key:
+            stats["GPP_std"].append(value)
         else:
             pass
+    yr = [y for y in range(1980,1980+len(stats["GPP_mean"]))]
 
-    stats = pd.DataFrame({
-        "mean": mean, 
-        "std": std})
+    stats = pd.DataFrame(stats, index=yr)
 
     feat["properties"].update({
         "id": i, 
@@ -340,6 +339,25 @@ layer_header = [
 ]
 
 
+allnan = lambda v: np.count_nonzero(~np.isnan(v.data))==0
+ignorevars = ["time","stat","sample","lat","lon"]
+
+def get_plottable_variables(xrd):
+    plotvars = []
+    for v in list(xrd.variables):
+        if v not in ignorevars:
+            if not allnan(xrd[v]):
+                plotvars.append(v)
+    return(plotvars)
+
+def get_active_samples(layer):
+    on = []
+    for sample in layer.samples.samp:
+        if sample.on:
+            on.append(sample.id)
+    return(on)
+
+
 class JupyterSMV(object):
     """App."""
 
@@ -392,7 +410,7 @@ class JupyterSMV(object):
         for i, feat in enumerate(features):           # loop over features
             
             poly = Layer(i, feat, cols[i])            # get Layer class
-            poly.layer.on_click(self.layer_click_handler)  # set global callback
+            poly.layer.on_click(self.layer_click_handler)  # global callback
             self.polys.add_layer(poly.layer)          # add to poly grp
 
             pts, samps = LayerGroup(), []             # points group; Samples
@@ -405,65 +423,99 @@ class JupyterSMV(object):
             layers.append((i,poly.lat,poly.lon,poly,samps,pts,None)) # append
         
         self.layers = pd.DataFrame(layers, columns=layer_header)     # layers
-        #cent = self.layers[["lat","lon"]]
+        self.selected = None
 
 
     def submit_handler(self, b):
         """Resets UI and sends requests to SMV when new submit."""
         
-        on = self.get_on_lyrs()
-        for ix, row in on.iterrows():                      # loop over samples col
-            if not row["layer"].dl:                        # if not downloaded
-                sample = row.samples["samp"].tolist()      # get samples
+        layer_row = self.layers.iloc[self.selected]
+        sample = layer_row.samples["samp"].tolist()
 
-                self.progress.min = 0                 # reset progress bar
-                self.progress.max = len(sample)
-                self.progress.value = 0
-                
-                for s in sample:                           # loop over sample pts
-                    self.progress.value += 1                    # update progress bar
-                    s.update(**pt_status_on)               # update style
-                    s.submit()                             # download the data
-                
-                xrds = xr.concat([s.xr for s in sample], "sample")
-                self.layers.at[ix,"xr"] = xrds             # make xr dataset
-                row["layer"].dl = True                     # set dl status to True
-        
-        self.submit.disabled = True                             # disable submit button
+        self.progress.min = 0                      # reset progress bar
+        self.progress.max = len(sample)
+        self.progress.value = 0
+
+        for s in sample:                           # loop over sample pts
+            self.progress.value += 1               # update progress bar
+            s.update(**pt_status_on)               # update style
+            s.submit()                             # download the data
+        xrds = xr.concat([s.xr for s in sample], "sample")
+        self.layers.at[self.selected,"xr"] = xrds  # make xr dataset
+
+        layer_row.layer.dl = True                  # set dl status to True
+        self.init_plotter()
 
 
     def layer_click_handler(self, **kwargs): 
         """ Evaluates when new polygon is selected. Layer.toggle first!"""
         
         if list(kwargs.keys()) != ['event', 'properties']: # check event
-            return(None)                                  # skip basemap
+            return(None)                                   # skip basemap
 
-        i = int(kwargs["properties"]["id"])                # get selected poly id
-        layer_row = self.layers.iloc[i]                         # get row for selected
-        layer_inst = layer_row.layer                       # get Layer class inst
+        i = int(kwargs["properties"]["id"])             # get selected poly id
+        layer_row = self.layers.iloc[i]                 # get row for selected
+        layer_inst = layer_row.layer                    # get Layer class inst
+        self.selected = i
 
-        if layer_inst.on:
-            self.points.add_layer(layer_row["points"]) 
-            self. mapw.center = (layer_inst.lat, layer_inst.lon)
-            self.mapw.zoom = 9
+        self.points.clear_layers()
+        self.points.add_layer(layer_row["points"]) 
+        self.mapw.center = (layer_inst.lat, layer_inst.lon)
+        self.mapw.zoom = 9
+
+        if layer_inst.dl:
+            self.init_plotter()
+            self.submit.disabled = True
         else:
-            self.points.remove_layer(layer_row["points"]) 
-        
-        self.submit.disabled = True if len(self.get_on_lyrs())==0 else False
+            self.submit.disabled = False
 
 
-    def get_on_lyrs(self, column=None):
-        """Returns a subset (or column) of layers df, only "on" layers."""
+    def init_plotter(self):
+        lyr = self.layers.iloc[self.selected]
+        xds = lyr.xr
+        plotvars = get_plottable_variables(xds)
+        self.fig, axs = plt.subplots(3,1)
 
-        on = []
-        for ix, row in self.layers.iterrows():
-            if row["layer"].on:
-                on.append(ix)
-        df = self.layers.iloc[on][column] if column else self.layers.iloc[on]
+        mean = lyr.layer.stats.GPP_mean                    # USFS dataset -->> 
+        std = lyr.layer.stats.GPP_std
+        mean.plot(color="black", ax=axs[2])
+        (mean-std).plot(color="black", ls=":", ax=axs[2])
+        (mean+std).plot(color="black", ls=":", ax=axs[2])  # <<-- USFS dataset
 
-        return(df)
+        def update(Dataset, Statistic):
+            """ """
+            Samples = get_active_samples(lyr)
+            select = dict(stat=Statistic, sample=Samples)
+            axs[0].clear(); axs[1].clear()
+            xds[Dataset].sel(select).plot.line(x='time', ax=axs[0])
+            xds[Dataset].sel(select).mean("sample").plot.line(x='time', ax=axs[1])
+            self.fig.canvas.draw()
+
+        widgets = dict(Dataset=plotvars, Statistic=["Mean","Min","Max"])
+        p = interactive(update, **widgets);
+        display(p)
+
+
+    # def get_on_lyrs(self, column=None):
+    #     """Returns a subset (or column) of layers df, only "on" layers."""
+
+    #     on = []
+    #     for ix, row in self.layers.iterrows():
+    #         if row["layer"].on:
+    #             on.append(ix)
+    #     df = self.layers.iloc[on][column] if column else self.layers.iloc[on]
+
+    #     return(df)
 
     # def update_output(self):
     #    out.clear_output()
     #    with out:
     #        print(site_details.format(**lo.site))
+
+
+    # for ix, row in layers.iterrows():              # loop over samples col
+    #     active = get_active_samples(row)
+    #     selxr = row.xr.sel(sample=active)
+    #     selxrs.append(selxr)
+
+    # plotvars = get_plottable_variables(layer)

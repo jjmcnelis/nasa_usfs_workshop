@@ -16,9 +16,7 @@ from IPython.display import display
 from ipyleaflet import Map, LayerGroup, GeoJSON, CircleMarker
 from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML, interactive
 
-
-# usfs shapefile fields - delete
-fields = [
+fields = [                               # usfs shapefile fields - delete
     "FORESTNUMB",
     "DISTRICTNU",
     "REGION",
@@ -49,6 +47,7 @@ MINORITY: {MINORITY}
 MAJORITY: {MAJORITY}
 COUNT:    {COUNT}
 """
+
 
 # ----------------------------------------------------------------------------
 # app settings
@@ -218,6 +217,26 @@ def get_ease(shapely_geom):
 
     return(ease_reduced)
 
+def get_properties(prop):
+    """ """
+
+    details, stats = {}, {"MEAN": [], "STD": []}
+    for key, value in prop.items():
+        if key in fields:
+            details[key] = value
+        elif "MEAN_" in key:
+            stats["MEAN"].append(value)
+        elif "STD_" in key:
+            stats["STD"].append(value)
+        else:
+            pass
+    yr = pd.date_range(
+        start="1985",
+        freq="1Y",
+        periods=len(stats["MEAN"]))
+    stats = pd.DataFrame(stats, index=yr)
+
+    return((details, stats))
 
 def get_layer_data(i, feat, col, fields=["FID"]):
     """ """
@@ -227,21 +246,7 @@ def get_layer_data(i, feat, col, fields=["FID"]):
     cent = shapely_geom.centroid              # centroid
     lat = cent.y                              # lat, lon
     lon = cent.x
-
-    details, stats = {}, {"GPP_mean": [], "GPP_std": []}
-    for key, value in feat["properties"].items():
-        if key in fields:
-            details[key] = value
-        elif "MEAN_" in key:
-            stats["GPP_mean"].append(value)
-        elif "STD_" in key:
-            stats["GPP_std"].append(value)
-        else:
-            pass
-    yr = [y for y in range(1980,1980+len(stats["GPP_mean"]))]
-
-    stats = pd.DataFrame(stats, index=yr)
-
+    details, stats = get_properties(feat["properties"])
     feat["properties"].update({
         "id": i, 
         "style": {
@@ -295,20 +300,6 @@ class Layer(object):
 
 
 # ----------------------------------------------------------------------------
-# colors
-
-
-def get_colors(n, cmap=cm.Set3):
-    """ """
-
-    cspace = np.linspace(0.0, 1.0, n)           # 1
-    rgb = cmap(cspace)                          # 2
-    cols = [colors.to_hex(c[0:3]) for c in rgb] # 3
-
-    return(cols)
-
-
-# ----------------------------------------------------------------------------
 # app
 
 pt_status_on = dict(
@@ -342,6 +333,24 @@ layer_header = [
 allnan = lambda v: np.count_nonzero(~np.isnan(v.data))==0
 ignorevars = ["time","stat","sample","lat","lon"]
 
+def get_colors(n, cmap=cm.Set3):
+    """ """
+
+    cspace = np.linspace(0.0, 1.0, n)           # 1
+    rgb = cmap(cspace)                          # 2
+    cols = [colors.to_hex(c[0:3]) for c in rgb] # 3
+
+    return(cols)
+
+def from_geojson(input_geojson):
+    """ """
+    with open(input_geojson, "r") as f:
+        shapes = json.load(f)
+    features = shapes["features"]
+    cols = get_colors(len(features))
+    
+    return((features, cols))
+
 def get_plottable_variables(xrd):
     plotvars = []
     for v in list(xrd.variables):
@@ -362,17 +371,16 @@ class JupyterSMV(object):
     """App."""
 
 
-    def __init__(self):
+    def __init__(self, in_features=None, mpl_notebook=False):
 
         self.polys = LayerGroup()
         self.points = LayerGroup()
         self.mapw = Map(
             layers=(basemap, self.polys, self.points,), 
-            center=(32.75, -109), 
+            center=map_center, 
             zoom=7, 
             scroll_wheel_zoom=True)
 
-        # widgets/ui
         self.submit = Button( 
             description="Submit", 
             disabled=True, 
@@ -383,28 +391,25 @@ class JupyterSMV(object):
             description="Progress: ", 
             layout=Layout(width="95%"))
 
-        # self.out = Output(
-        #     layout=Layout(dict(
-        #         width="30%", 
-        #         height="400px", 
-        #         overflow_y="scroll", 
-        #         overflow_x="hidden", 
-        #         border="1px solid gray")))
-
-        self.ui = VBox([
-            self.mapw, 
-            HBox([self.submit, self.progress])])
-
-
-    def geojson(self, g="sites/Sites_lf_geo.json"):
-        """ """
-
-        with open(g, "r") as f:
-            shapes = json.load(f)
+        layout = [self.mapw, HBox([self.submit, self.progress])]
         
-        features = shapes["features"]
-        n = len(features)
-        cols = get_colors(n)
+        if in_features:                               # if given, 
+            self.load_features(in_features)           # load input features
+
+        if mpl_notebook:
+            self.init_plotter = self.live_plot
+            self.fig, self.axs = plt.subplots(3,1)
+        else:
+            self.init_plotter = self.static_plot
+            self.out = Output()
+            self.out.layout = {"width": "95%"}
+            layout = layout + [self.out]
+
+        self.ui = VBox(layout)
+
+    def load_features(self, infeats):
+        """ """
+        features, cols = from_geojson(infeats)        # get features and cols
 
         layers = []                                   # a temporary list 
         for i, feat in enumerate(features):           # loop over features
@@ -469,26 +474,27 @@ class JupyterSMV(object):
         else:
             self.submit.disabled = False
 
+    # ------------------------------------------------------------------------
+    
 
-    def init_plotter(self):
+    def live_plot(self):
         lyr = self.layers.iloc[self.selected]
         xds = lyr.xr
         plotvars = get_plottable_variables(xds)
-        self.fig, axs = plt.subplots(3,1)
 
-        mean = lyr.layer.stats.GPP_mean                    # USFS dataset -->> 
+        mean = lyr.layer.stats.GPP_mean                        # USFS -->> 
         std = lyr.layer.stats.GPP_std
         mean.plot(color="black", ax=axs[2])
-        (mean-std).plot(color="black", ls=":", ax=axs[2])
-        (mean+std).plot(color="black", ls=":", ax=axs[2])  # <<-- USFS dataset
+        (mean-std).plot(color="black", ls=":", ax=self.axs[2])
+        (mean+std).plot(color="black", ls=":", ax=self.axs[2]) # <<-- USFS
 
         def update(Dataset, Statistic):
             """ """
             Samples = get_active_samples(lyr)
             select = dict(stat=Statistic, sample=Samples)
-            axs[0].clear(); axs[1].clear()
-            xds[Dataset].sel(select).plot.line(x='time', ax=axs[0])
-            xds[Dataset].sel(select).mean("sample").plot.line(x='time', ax=axs[1])
+            self.axs[0].clear(); self.axs[1].clear(); self.axs[2].clear()
+            xds[Dataset].sel(select).plot.line(x='time', ax=self.axs[0])
+            xds[Dataset].sel(select).mean("sample").plot.line(x='time', ax=self.axs[1])
             self.fig.canvas.draw()
 
         widgets = dict(Dataset=plotvars, Statistic=["Mean","Min","Max"])
@@ -496,26 +502,49 @@ class JupyterSMV(object):
         display(p)
 
 
-    # def get_on_lyrs(self, column=None):
-    #     """Returns a subset (or column) of layers df, only "on" layers."""
+    def static_plot(self):
 
-    #     on = []
-    #     for ix, row in self.layers.iterrows():
-    #         if row["layer"].on:
-    #             on.append(ix)
-    #     df = self.layers.iloc[on][column] if column else self.layers.iloc[on]
+        lyr = self.layers.iloc[self.selected]
+        xds = lyr.xr
+        mean, std = lyr.layer.stats.MEAN, lyr.layer.stats.STD
+        fig, axs = plt.subplots(2,1)
 
-    #     return(df)
+        # SMV datasets -------------------------------------------------------
 
-    # def update_output(self):
-    #    out.clear_output()
-    #    with out:
-    #        print(site_details.format(**lo.site))
+        # dimension filter
+        active_samples = get_active_samples(lyr)
+        dimension_filter = dict(stat="Mean", sample=active_samples)
+        xds_filt = xds.sel(dimension_filter)
 
+        # get plottable variables
+        plotvars = get_plottable_variables(xds_filt)
+        xds_filt = xds_filt[plotvars]
 
-    # for ix, row in layers.iterrows():              # loop over samples col
-    #     active = get_active_samples(row)
-    #     selxr = row.xr.sel(sample=active)
-    #     selxrs.append(selxr)
+        # get plotting subsets
+        xds_filt["SMAP_surface"].mean("sample").plot.line(x='time', ax=axs[0])
+        xds_filt["SMAP_rootzone"].mean("sample").plot.line(x='time', ax=axs[0])
+        
+        try:
+            xds_filt.filter_by_attrs(type="in situ", soil_zone="surface").mean("sample").plot.line(x='time', ax=axs[0])
+            xds_filt.filter_by_attrs(type="in situ", soil_zone="rootzone").mean("sample").plot.line(x='time', ax=axs[0])
+        except:
+            print("Unable to plot in situ.")
+        
+        try:
+            xds_filt.filter_by_attrs(type="airborne", soil_zone="surface").mean("sample").plot.line(x='time', ax=axs[0])
+            xds_filt.filter_by_attrs(type="airborne", soil_zone="rootzone").mean("sample").plot.line(x='time', ax=axs[0])
+        except:
+            print("Unable to plot airborne.")
 
-    # plotvars = get_plottable_variables(layer)
+        # USFS productivity statistics ---------------------------------------
+
+        #ax2 = ax1.twinx()
+        mean.plot(color="black", ax=axs[1])
+        (mean-std).plot(color="black", ls=":", ax=axs[1])
+        (mean+std).plot(color="black", ls=":", ax=axs[1])
+
+        # --------------------------------------------------------------------
+
+        fig.tight_layout()
+        with self.out:
+            plt.show()

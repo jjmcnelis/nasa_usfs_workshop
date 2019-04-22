@@ -60,8 +60,26 @@ smv_datasets = pd.read_csv(
     index_col="dataset", 
     header=0)
 
-map_center = (32.75, -109)
-basemap = mwg.basemap_to_tiles(mwg.basemaps.Esri.WorldImagery)
+# ----------------------------------------------------------------------------
+# widget settings
+
+# map widget 
+bmap = mwg.basemap_to_tiles(mwg.basemaps.Esri.WorldImagery)
+map_args = dict(
+    center=(32.75, -109), 
+    zoom=7, 
+    scroll_wheel_zoom=True)
+
+# submit button
+submit_args = dict(
+    description="Submit", 
+    disabled=True, 
+    button_style="success")
+
+# progress bar
+progress_args = dict(
+    description="Progress: ", 
+    layout=Layout(width="95%"))
 
 # ----------------------------------------------------------------------------
 # ease grid
@@ -375,26 +393,13 @@ class JupyterSMV(object):
 
         self.polys = LayerGroup()
         self.points = LayerGroup()
-        self.mapw = Map(
-            layers=(basemap, self.polys, self.points,), 
-            center=map_center, 
-            zoom=7, 
-            scroll_wheel_zoom=True)
+        self.mapw = Map(layers=(bmap, self.polys, self.points,), **map_args)
 
-        self.submit = Button( 
-            description="Submit", 
-            disabled=True, 
-            button_style="success")
+        self.submit = Button(**submit_args)
         self.submit.on_click(self.submit_handler)
-
-        self.progress = IntProgress(
-            description="Progress: ", 
-            layout=Layout(width="95%"))
+        self.progress = IntProgress(**progress_args)
 
         layout = [self.mapw, HBox([self.submit, self.progress])]
-        
-        if in_features:                               # if given, 
-            self.load_features(in_features)           # load input features
 
         if mpl_notebook:
             self.init_plotter = self.live_plot
@@ -404,8 +409,12 @@ class JupyterSMV(object):
             self.out = Output()
             self.out.layout = {"width": "95%"}
             layout = layout + [self.out]
+        
+        if in_features:                               # if given, 
+            self.load_features(in_features)           # load input features
 
         self.ui = VBox(layout)
+
 
     def load_features(self, infeats):
         """ """
@@ -524,17 +533,29 @@ class JupyterSMV(object):
         xds_filt["SMAP_surface"].mean("sample").plot.line(x='time', ax=axs[0])
         xds_filt["SMAP_rootzone"].mean("sample").plot.line(x='time', ax=axs[0])
         
-        try:
-            xds_filt.filter_by_attrs(type="in situ", soil_zone="surface").mean("sample").plot.line(x='time', ax=axs[0])
-            xds_filt.filter_by_attrs(type="in situ", soil_zone="rootzone").mean("sample").plot.line(x='time', ax=axs[0])
-        except:
-            print("Unable to plot in situ.")
+        # xds_filt_insitu = xds_filt.filter_by_attrs(type="in situ") #
+        # xds_filt_airborne = xds_filt.filter_by_attrs(type="airborne") #soil_zone="rootzone"
+
+        # for d in xds_filt_insitu:
+        #     surf = xds_filt_insitu.filter_by_attrs(soil_zone="surface")
+        #     root = xds_filt_insitu.filter_by_attrs(soil_zone="rootzone")
+        #     surf.mean("sample")
+        #     xds_filt_surface[d].mean("sample").plot.line(x='time', ax=axs[0])
+            
+        #     except:
+        #         except Exception as e:
+        #             print("Unable to plot in situ.")
+        #             print(e)
         
-        try:
-            xds_filt.filter_by_attrs(type="airborne", soil_zone="surface").mean("sample").plot.line(x='time', ax=axs[0])
-            xds_filt.filter_by_attrs(type="airborne", soil_zone="rootzone").mean("sample").plot.line(x='time', ax=axs[0])
-        except:
-            print("Unable to plot airborne.")
+            
+        #     xds_filt.filter_by_attrs(, soil_zone="rootzone").mean("sample").plot.line(x='time', ax=axs[0])
+
+        # try:
+        #     xds_filt.filter_by_attrs(type="airborne", soil_zone="surface").mean("sample").plot.line(x='time', ax=axs[0])
+        #     xds_filt.filter_by_attrs(type="airborne", soil_zone="rootzone").mean("sample").plot.line(x='time', ax=axs[0])
+        # except Exception as e:
+        #     print("Unable to plot airborne.")
+        #     print(e)
 
         # USFS productivity statistics ---------------------------------------
 

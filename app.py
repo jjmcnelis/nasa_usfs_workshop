@@ -121,6 +121,8 @@ def split_pd(col):
 # ----------------------------------------------------------------------------
 # xarray 
 
+allnan = lambda v: np.count_nonzero(~np.isnan(v.data))==0
+
 latatts = dict(
     standard_name="latitude",
     long_name="sample latitude",
@@ -139,7 +141,9 @@ def pd_to_xr(dataset, df):
 
     x = xr.DataArray(df, name=dataset, attrs=a)
     x = x.rename(dict(dim_1="stat"))
-    x.attrs["allnan"] = int(np.isnan(np.nanmean(x.data)))
+    x.attrs["mean_nan"] = int(allnan(x.sel(stat="Mean")))
+    x.attrs["min_nan"] = int(allnan(x.sel(stat="Min")))
+    x.attrs["max_nan"] = int(allnan(x.sel(stat="Max")))
     
     return(x)
 
@@ -347,9 +351,8 @@ layer_header = [
     "xr"
 ]
 
-
-allnan = lambda v: np.count_nonzero(~np.isnan(v.data))==0
 ignorevars = ["time","stat","sample","lat","lon"]
+
 
 def get_colors(n, cmap=cm.Set3):
     """ """
@@ -366,18 +369,19 @@ def from_geojson(input_geojson):
         shapes = json.load(f)
     features = shapes["features"]
     cols = get_colors(len(features))
-    
     return((features, cols))
 
-def get_plottable_variables(xrd):
+def get_plottable(xds):
+    """ """
     plotvars = []
-    for v in list(xrd.variables):
+    for v in list(xds.variables):
         if v not in ignorevars:
-            if not allnan(xrd[v]):
+            if not allnan(xds[v]):
                 plotvars.append(v)
     return(plotvars)
 
 def get_active_samples(layer):
+    """ """
     on = []
     for sample in layer.samples.samp:
         if sample.on:
@@ -432,7 +436,7 @@ class JupyterSMV(object):
                 s = Sample(j, p[0], p[1])             # make Sample instance
                 pts.add_layer(s.pt)                   # add to points group
                 samps.append((j, p[0], p[1], s))      # append tuple to list  
-                
+
             samps = pd.DataFrame(samps, columns=sample_header)       # samples
             layers.append((i,poly.lat,poly.lon,poly,samps,pts,None)) # append
         
@@ -454,6 +458,7 @@ class JupyterSMV(object):
             self.progress.value += 1               # update progress bar
             s.update(**pt_status_on)               # update style
             s.submit()                             # download the data
+            s.pt.on_click(self.init_plotter)
         xrds = xr.concat([s.xr for s in sample], "sample")
         self.layers.at[self.selected,"xr"] = xrds  # make xr dataset
 
@@ -484,16 +489,59 @@ class JupyterSMV(object):
             self.submit.disabled = False
 
     # ------------------------------------------------------------------------
-    
+
+    def static_plot(self, event=None, type=None, coordinates=None):
+        """ """
+
+        lyr = self.layers.iloc[self.selected]     
+        fig, axs = plt.subplots(nrows=3, ncols=1, figsize=(11, 8))
+        xds = lyr.xr 
+
+        # xds dimension filter
+        active_samples = get_active_samples(lyr)
+        dimension_filter = dict(stat="Mean", sample=active_samples)
+        xdsf = xds.sel(dimension_filter)
+
+        # get plottable variables
+        plottable = get_plottable(xdsf)
+        xdsf = xdsf[plottable]
+
+        # USFS productivity statistics ---------------------------------------
+        
+        st, et = xdsf.time.data[0], xdsf.time.data[-1]   # xds time bounds
+
+        stats = lyr.layer.stats.loc[st:et]
+        stats.MEAN.plot(color="black", ax=axs[0])
+        (stats.MEAN-stats.STD).plot(color="black", ls=":", ax=axs[0])
+        (stats.MEAN+stats.STD).plot(color="black", ls=":", ax=axs[0])
+
+        # SMV datasets -------------------------------------------------------
+
+        # get surface and rootzone
+        xdsf_surf = xdsf.filter_by_attrs(soil_zone="surface")
+        for d in xdsf_surf:
+            xdsf_surf[d].mean("sample").plot.line(x='time', ax=axs[1])
+
+        xdsf_root = xdsf.filter_by_attrs(soil_zone="rootzone")
+        for d in xdsf_root:
+            xdsf_root[d].mean("sample").plot.line(x='time', ax=axs[2])
+
+        # draw ---------------------------------------------------------------
+
+        fig.tight_layout()
+        self.out.clear_output()
+        with self.out:
+            plt.show()
+
 
     def live_plot(self):
         lyr = self.layers.iloc[self.selected]
         xds = lyr.xr
-        plotvars = get_plottable_variables(xds)
+        plotvars = get_plottable(xds)
 
         mean = lyr.layer.stats.GPP_mean                        # USFS -->> 
         std = lyr.layer.stats.GPP_std
-        mean.plot(color="black", ax=axs[2])
+        mean.plot(color="black", ax=self.axs[2])
         (mean-std).plot(color="black", ls=":", ax=self.axs[2])
         (mean+std).plot(color="black", ls=":", ax=self.axs[2]) # <<-- USFS
 
@@ -507,65 +555,5 @@ class JupyterSMV(object):
             self.fig.canvas.draw()
 
         widgets = dict(Dataset=plotvars, Statistic=["Mean","Min","Max"])
-        p = interactive(update, **widgets);
+        p = interactive(update, **widgets)
         display(p)
-
-
-    def static_plot(self):
-
-        lyr = self.layers.iloc[self.selected]
-        xds = lyr.xr
-        mean, std = lyr.layer.stats.MEAN, lyr.layer.stats.STD
-        fig, axs = plt.subplots(2,1)
-
-        # SMV datasets -------------------------------------------------------
-
-        # dimension filter
-        active_samples = get_active_samples(lyr)
-        dimension_filter = dict(stat="Mean", sample=active_samples)
-        xds_filt = xds.sel(dimension_filter)
-
-        # get plottable variables
-        plotvars = get_plottable_variables(xds_filt)
-        xds_filt = xds_filt[plotvars]
-
-        # get plotting subsets
-        xds_filt["SMAP_surface"].mean("sample").plot.line(x='time', ax=axs[0])
-        xds_filt["SMAP_rootzone"].mean("sample").plot.line(x='time', ax=axs[0])
-        
-        # xds_filt_insitu = xds_filt.filter_by_attrs(type="in situ") #
-        # xds_filt_airborne = xds_filt.filter_by_attrs(type="airborne") #soil_zone="rootzone"
-
-        # for d in xds_filt_insitu:
-        #     surf = xds_filt_insitu.filter_by_attrs(soil_zone="surface")
-        #     root = xds_filt_insitu.filter_by_attrs(soil_zone="rootzone")
-        #     surf.mean("sample")
-        #     xds_filt_surface[d].mean("sample").plot.line(x='time', ax=axs[0])
-            
-        #     except:
-        #         except Exception as e:
-        #             print("Unable to plot in situ.")
-        #             print(e)
-        
-            
-        #     xds_filt.filter_by_attrs(, soil_zone="rootzone").mean("sample").plot.line(x='time', ax=axs[0])
-
-        # try:
-        #     xds_filt.filter_by_attrs(type="airborne", soil_zone="surface").mean("sample").plot.line(x='time', ax=axs[0])
-        #     xds_filt.filter_by_attrs(type="airborne", soil_zone="rootzone").mean("sample").plot.line(x='time', ax=axs[0])
-        # except Exception as e:
-        #     print("Unable to plot airborne.")
-        #     print(e)
-
-        # USFS productivity statistics ---------------------------------------
-
-        #ax2 = ax1.twinx()
-        mean.plot(color="black", ax=axs[1])
-        (mean-std).plot(color="black", ls=":", ax=axs[1])
-        (mean+std).plot(color="black", ls=":", ax=axs[1])
-
-        # --------------------------------------------------------------------
-
-        fig.tight_layout()
-        with self.out:
-            plt.show()

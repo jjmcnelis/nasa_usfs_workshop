@@ -32,9 +32,9 @@ fields = [                               # usfs shapefile fields - delete
 	"COUNT"
 ]
 
+#{FORESTNAME} ({FORESTNUMB})
+#{DISTRICTNA} ({DISTRICTNU})
 site_details = """
-{FORESTNAME} ({FORESTNUMB})
-{DISTRICTNA} ({DISTRICTNU})
 REGION:   {REGION}
 ACRES:    {GIS_ACRES}
 MIN:      {MIN}
@@ -410,9 +410,10 @@ class JupyterSMV(object):
             self.fig, self.axs = plt.subplots(3,1)
         else:
             self.init_plotter = self.static_plot
-            self.out = Output()
-            self.out.layout = {"width": "95%"}
-            layout = layout + [self.out]
+            self.out1, self.out2 = Output(), Output()
+            self.out1.layout = {"width":"70%"}
+            self.out2.layout = {"width":"30%"}
+            layout = layout + [HBox([self.out1, self.out2])]
         
         if in_features:                               # if given, 
             self.load_features(in_features)           # load input features
@@ -493,8 +494,7 @@ class JupyterSMV(object):
     def static_plot(self, event=None, type=None, coordinates=None):
         """ """
 
-        lyr = self.layers.iloc[self.selected]     
-        fig, axs = plt.subplots(nrows=3, ncols=1, figsize=(11, 8))
+        lyr = self.layers.iloc[self.selected]
         xds = lyr.xr 
 
         # xds dimension filter
@@ -506,8 +506,10 @@ class JupyterSMV(object):
         plottable = get_plottable(xdsf)
         xdsf = xdsf[plottable]
 
+        fig, axs = plt.subplots(nrows=3, ncols=1, figsize=(9, 8))
+
         # USFS productivity statistics ---------------------------------------
-        
+
         st, et = xdsf.time.data[0], xdsf.time.data[-1]   # xds time bounds
 
         stats = lyr.layer.stats.loc[st:et]
@@ -517,24 +519,35 @@ class JupyterSMV(object):
 
         # SMV datasets -------------------------------------------------------
 
-        # get surface and rootzone
         xdsf_surf = xdsf.filter_by_attrs(soil_zone="surface")
-        for d in xdsf_surf:
-            xdsf_surf[d].mean("sample").plot.line(x='time', ax=axs[1])
-
         xdsf_root = xdsf.filter_by_attrs(soil_zone="rootzone")
+        for d in xdsf_surf:
+            xd = xdsf_surf[d].mean("sample").dropna("time", how="all")
+            xd.plot.line(x='time', ax=axs[1])
         for d in xdsf_root:
-            xdsf_root[d].mean("sample").plot.line(x='time', ax=axs[2])
+            xd = xdsf_root[d].mean("sample").dropna("time", how="all")
+            xd.plot.line(x='time', ax=axs[2])
 
         # draw ---------------------------------------------------------------
 
+        axdata = [("primary productivity", "kgC/m2"),
+                ("volumetric soil moisture: surface", "m3/m3"),
+                ("volumetric soil moisture: rootzone", "m3/m3")]
+        for i, a in enumerate(axdata):
+            axs[i].set_title(a[0]); axs[i].set_ylabel(a[1])
+
         fig.tight_layout()
-        self.out.clear_output()
-        with self.out:
+        self.out1.clear_output(); self.out2.clear_output()
+        with self.out1:
             plt.show()
+        with self.out2:
+            print(site_details.format(**lyr.layer.details))
 
 
     def live_plot(self):
+        print("Re-implement.")
+
+    """
         lyr = self.layers.iloc[self.selected]
         xds = lyr.xr
         plotvars = get_plottable(xds)
@@ -557,3 +570,6 @@ class JupyterSMV(object):
         widgets = dict(Dataset=plotvars, Statistic=["Mean","Min","Max"])
         p = interactive(update, **widgets)
         display(p)
+    """
+
+

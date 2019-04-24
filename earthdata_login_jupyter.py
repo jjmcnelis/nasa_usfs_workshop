@@ -66,7 +66,7 @@ class EarthdataLogin(requests.Session):
                     original_parsed.hostname != self.AUTH_HOST:
                 del headers['Authorization']
                    
-        self.auth = None                    # purge username/password inputs
+        #self.auth = None                    # purge username/password inputs
         return                              # return requests.Session object
 
 

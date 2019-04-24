@@ -159,7 +159,7 @@ def get_sample_xr(samp):
     df = samp.df                                         # get the sample df
     ds = {}
     for dataset in df.columns:
-        if "FLUXNET" not in dataset:
+        if ("FLUXNET" not in dataset) & ("PBOH2O" not in dataset): # disabled
             split_column = split_pd(df[dataset])
             ds[dataset] = pd_to_xr(dataset, split_column)
 

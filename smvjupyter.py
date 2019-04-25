@@ -31,7 +31,7 @@ warnings.filterwarnings('ignore')
 auth = dict(ORNL_DAAC_USER_NUM=str(32863))
 smv_download = "https://daac.ornl.gov/cgi-bin/viz/download.pl?"
 smv_datasets = pd.read_csv(
-    "nasa_usfs_workshop/smvdatasets.csv", 
+    "docs/smvdatasets.csv", 
     index_col="dataset", 
     header=0)
 ignore_variables = [
@@ -206,8 +206,8 @@ class Sample(object):
 # ----------------------------------------------------------------------------
 # input polygon data
 
-latf = "nasa_usfs_workshop/EASE2_M09km.lats.3856x1624x1.double"
-lonf = "nasa_usfs_workshop/EASE2_M09km.lons.3856x1624x1.double"
+latf = "docs/EASE2_M09km.lats.3856x1624x1.double"
+lonf = "docs/EASE2_M09km.lons.3856x1624x1.double"
 
 lats = np.fromfile(latf, dtype=np.float64).flatten() 
 lons = np.fromfile(lonf, dtype=np.float64).flatten()

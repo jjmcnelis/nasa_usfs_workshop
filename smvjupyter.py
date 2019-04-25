@@ -206,8 +206,8 @@ class Sample(object):
 # ----------------------------------------------------------------------------
 # input polygon data
 
-latf = "docs/EASE2_M09km.lats.3856x1624x1.double"
-lonf = "docs/EASE2_M09km.lons.3856x1624x1.double"
+latf = "nasa_usfs_workshop/EASE2_M09km.lats.3856x1624x1.double"
+lonf = "nasa_usfs_workshop/EASE2_M09km.lons.3856x1624x1.double"
 
 lats = np.fromfile(latf, dtype=np.float64).flatten() 
 lons = np.fromfile(lonf, dtype=np.float64).flatten()

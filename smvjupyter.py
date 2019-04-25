@@ -31,7 +31,7 @@ warnings.filterwarnings('ignore')
 auth = dict(ORNL_DAAC_USER_NUM=str(32863))
 smv_download = "https://daac.ornl.gov/cgi-bin/viz/download.pl?"
 smv_datasets = pd.read_csv(
-    "smvdatasets.csv", 
+    "nasa_usfs_workshop/smvdatasets.csv", 
     index_col="dataset", 
     header=0)
 ignore_variables = [

@@ -1,39 +1,47 @@
-import os                            # core py3 
+import os
 import json
 import warnings
+from math import ceil
 from io import StringIO
+from datetime import datetime
 
-import requests                      # data
+import requests
 import numpy as np
 import pandas as pd
 import xarray as xr
 from shapely.geometry import shape
 
-import ipyleaflet as mwg
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from IPython.display import display
+
+import ipyleaflet as mwg
 from ipyleaflet import Map, LayerGroup, GeoJSON, CircleMarker
 from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML, interactive
 
-fields = [                               # usfs shapefile fields - delete
-    "FORESTNUMB",
-    "DISTRICTNU",
-    "REGION",
-    "GIS_ACRES",
-	"MIN",
-	"MEDIAN",
-	"MAX",
-	"RANGE",
-	"SUM",
-	"VARIETY",
-	"MINORITY",
-	"MAJORITY",
-	"COUNT"
-]
 
-#{FORESTNAME} ({FORESTNUMB})
-#{DISTRICTNA} ({DISTRICTNU})
+# ----------------------------------------------------------------------------
+# app settings
+
+#font = {"family": "normal", "weight": "normal", "size": 16}  # matplotlib ->
+#plt.rcParams['figure.figsize'] = [14, 5]
+#plt.rc("font", **font) # <- some matplotlib settings
+
+warnings.filterwarnings('ignore')
+auth = dict(ORNL_DAAC_USER_NUM=str(32863))
+smv_download = "https://daac.ornl.gov/cgi-bin/viz/download.pl?"
+smv_datasets = pd.read_csv(
+    "docs/smvdatasets.csv", 
+    index_col="dataset", 
+    header=0)
+ignore_variables = [
+    "sample","time","stat","lat","lon","FLUXNET_surface","FLUXNET_rootzone"]
+
+# usfs shapefile fields; only applies to Yaxing's workshop -->>
+fields = [
+    "FORESTNUMB","DISTRICTNU","REGION","GIS_ACRES","MIN","MEDIAN","MAX",
+    "RANGE","SUM","VARIETY","MINORITY","MAJORITY","COUNT"]
+
 site_details = """
 REGION:   {REGION}
 ACRES:    {GIS_ACRES}
@@ -47,53 +55,62 @@ MINORITY: {MINORITY}
 MAJORITY: {MAJORITY}
 COUNT:    {COUNT}
 """
-
-
-# ----------------------------------------------------------------------------
-# app settings
-
-warnings.filterwarnings('ignore')
-auth = dict(ORNL_DAAC_USER_NUM=str(32863))
-smv_download = "https://daac.ornl.gov/cgi-bin/viz/download.pl?"
-smv_datasets = pd.read_csv(
-    "docs/smvdatasets.csv", 
-    index_col="dataset", 
-    header=0)
+#{FORESTNAME} ({FORESTNUMB})
+#{DISTRICTNA} ({DISTRICTNU})
 
 # ----------------------------------------------------------------------------
 # widget settings
 
-# map widget 
-bmap = mwg.basemap_to_tiles(mwg.basemaps.Esri.WorldImagery)
+bmap = mwg.basemap_to_tiles(mwg.basemaps.Esri.WorldImagery)    # map widget 
 map_args = dict(
     center=(32.75, -109), 
     zoom=7, 
     scroll_wheel_zoom=True)
 
-# submit button
-submit_args = dict(
+submit_args = dict(                                            # submit button
     description="Submit", 
     disabled=True, 
     button_style="success")
 
-# progress bar
-progress_args = dict(
+progress_args = dict(                                          # progress bar
     description="Progress: ", 
     layout=Layout(width="95%"))
 
 # ----------------------------------------------------------------------------
-# ease grid
+# functions that don't support the all-in-one application
 
-latf = "docs/EASE2_M09km.lats.3856x1624x1.double"
-lonf = "docs/EASE2_M09km.lons.3856x1624x1.double"
 
-lats = np.fromfile(latf, dtype=np.float64).flatten() 
-lons = np.fromfile(lonf, dtype=np.float64).flatten()
-crds = np.dstack((lats,lons))[0]
+def poly_mapper(lyr, mw="25%", ow="75%", zoom=8):
+    """Generates the map/plot side-by-side widget container."""
+
+    l = (lyr["layer"].layer, lyr.points, bmap,)
+    m = Map(layers=l, center=(lyr["lat"], lyr["lon"]), zoom=zoom, width=mw)
+    o = Output(layout={"width": ow})
+    
+    return((m,o))
 
 
 # ----------------------------------------------------------------------------
-# SMV dataset formatters
+# SMV sample dataset formatters
+
+numvalid = lambda v: np.count_nonzero(~np.isnan(v.data))
+allnan = lambda v: numvalid(v)==0
+
+latatts = dict(
+    standard_name="latitude",
+    long_name="sample latitude",
+    units="degrees_north")
+
+lonatts = dict(
+    standard_name="latitude",
+    long_name="sample latitude",
+    units="degrees_north")
+
+pt_style = dict(
+    radius=6, 
+    stroke=False,
+    fill_opacity=0.6, 
+    fill_color="black")
 
 
 def txt_to_pd(response_text):
@@ -118,32 +135,12 @@ def split_pd(col):
     return(df)
 
 
-# ----------------------------------------------------------------------------
-# xarray 
-
-allnan = lambda v: np.count_nonzero(~np.isnan(v.data))==0
-
-latatts = dict(
-    standard_name="latitude",
-    long_name="sample latitude",
-    units="degrees_north")
-
-lonatts = dict(
-    standard_name="latitude",
-    long_name="sample latitude",
-    units="degrees_north")
-
-
 def pd_to_xr(dataset, df):
     """Makes an xr.Dataset from a pandas column (series) and coords."""
 
     a = smv_datasets.loc[dataset].to_dict()
-
     x = xr.DataArray(df, name=dataset, attrs=a)
     x = x.rename(dict(dim_1="stat"))
-    x.attrs["mean_nan"] = int(allnan(x.sel(stat="Mean")))
-    x.attrs["min_nan"] = int(allnan(x.sel(stat="Min")))
-    x.attrs["max_nan"] = int(allnan(x.sel(stat="Max")))
     
     return(x)
 
@@ -169,16 +166,6 @@ def get_sample_xr(samp):
     return(xds)
 
 
-# ----------------------------------------------------------------------------
-url = "https://daac.ornl.gov/cgi-bin/viz/download.pl?"
-
-pt_style = dict(
-    radius=7, 
-    stroke=False,
-    fill_opacity=0.6, 
-    fill_color="black")
-
-
 class Sample(object):
 
 
@@ -191,7 +178,7 @@ class Sample(object):
 
         self.on = False # on/off status user toggle
         self.pt = CircleMarker(location=(lat, lon), **pt_style)
-        self.download = url + "lt={0}&ln={1}&d=smap".format(lat, lon)    
+        self.download = smv_download+"lt={0}&ln={1}&d=smap".format(lat, lon)    
 
 
     def update(self, **kwargs):
@@ -217,7 +204,32 @@ class Sample(object):
 
 
 # ----------------------------------------------------------------------------
-# usfs data
+# input polygon data
+
+latf = "docs/EASE2_M09km.lats.3856x1624x1.double"
+lonf = "docs/EASE2_M09km.lons.3856x1624x1.double"
+
+lats = np.fromfile(latf, dtype=np.float64).flatten() 
+lons = np.fromfile(lonf, dtype=np.float64).flatten()
+crds = np.dstack((lats,lons))[0]
+
+
+def get_colors(n, cmap=cm.Set3):
+    """ """
+
+    cspace = np.linspace(0.0, 1.0, n)           # 1
+    rgb = cmap(cspace)                          # 2
+    cols = [colors.to_hex(c[0:3]) for c in rgb] # 3
+
+    return(cols)
+
+def from_geojson(input_geojson):
+    """ """
+    with open(input_geojson, "r") as f:
+        shapes = json.load(f)
+    features = shapes["features"]
+    cols = get_colors(len(features))
+    return((features, cols))
 
 
 def get_ease(shapely_geom):
@@ -238,6 +250,7 @@ def get_ease(shapely_geom):
             ease_reduced.append([p[0], p[1]]) # return lat, lon tuple
 
     return(ease_reduced)
+
 
 def get_properties(prop):
     """ """
@@ -260,22 +273,22 @@ def get_properties(prop):
 
     return((details, stats))
 
-def get_layer_data(i, feat, col, fields=["FID"]):
+
+def get_layer_data(i, feat, col="#FFFFFF", opac=0.4, samp=True):
     """ """
 
-    shapely_geom = shape(feat["geometry"])    # shapely geom
-    ease = get_ease(shapely_geom)             # ease grid points
-    cent = shapely_geom.centroid              # centroid
-    lat = cent.y                              # lat, lon
-    lon = cent.x
+    shapely_geom = shape(feat["geometry"])              # shapely geom
+    ease = get_ease(shapely_geom) if samp else None     # ease grid points
+    cent = shapely_geom.centroid                        # centroid
+    lat, lon = cent.y, cent.x                           # lat, lon
     details, stats = get_properties(feat["properties"])
     feat["properties"].update({
         "id": i, 
         "style": {
-            "weight": 1,
+            "weight": 0.75,
             "color": col,
             "fillColor": col,
-            "fillOpacity": 0.4}})
+            "fillOpacity": opac}})
 
     return((feat, ease, lat, lon, stats, details))
 
@@ -320,6 +333,105 @@ class Layer(object):
         for arg, val in kwargs.items():
             setattr(self.layer, arg, val)
 
+"""
+
+Make a help window!
+Make hbar plot 00-50%!
+Make a time line version too.
+
+
+
+"""
+# ----------------------------------------------------------------------------
+# other helpers
+
+figure_args = dict(ncols=1, sharex=True, figsize=(10,5))
+bar_args = dict(stacked=True, colormap="tab20c", legend=False)
+legend_ncols = lambda df: ceil(len(df.index)/10)   
+download_msg = """<p style="text-align:center;">
+Click <b>Submit</b> to download Soil Moisture Visualizer data for this site.
+<br></p>"""
+
+
+def get_ancillary_data(geojson):
+    """ """
+    features, cols = from_geojson(geojson)            # get features and cols
+
+    layers = []                                       # a temporary list 
+    for i, feat in enumerate(features):               # loop over features
+        lyrd = get_layer_data(i, feat, opac=0, samp=False)
+        lyrm = GeoJSON(
+            data=lyrd[0], 
+            hover_style={"color": cols[i], "fillOpacity": 0.1})
+        layers.append((i, lyrd[2], lyrd[3], lyrm, lyrd[5]))
+    layers = pd.DataFrame(layers, columns=["id","lat","lon","layer","attrs"])
+
+    return(layers)
+
+
+def get_nan_summary(xrdataset): 
+    """ """
+    nandict = {"in situ": {}, "airborne": {}, "spaceborne": {}}
+
+    for pt in nandict.keys():
+
+        # get the datasets for the current platform
+        pds = xrdataset.filter_by_attrs(type=pt).sel(stat="Mean", drop=True)
+        timelen, samplelen = pds.time.size, pds.sample.size
+        potential_obs_count = timelen*samplelen
+
+        # get variables with nodata; variables with data; valid counts
+        nodata, yesdata, obscount = [], [], {}
+        for name, dataset in pds.items():
+            if allnan(dataset):
+                nodata.append(name)
+            else:
+                yesdata.append(name)
+                obscount[name], obstotal = [], 0
+                for i in range(samplelen):
+                    samp = dataset.sel(sample=i)
+                    count = numvalid(samp)
+                    obscount[name].append(count) #/potential_obs_count*100
+                    obstotal += count
+                obscount[name].append(potential_obs_count-obstotal)
+        
+        # update summary dictionary
+        ix = list(range(samplelen))+["nan"]   
+        nandict[pt].update({                      
+            "nodata": nodata, 
+            "yesdata": yesdata, 
+            "summary": pd.DataFrame(obscount, index=ix)})
+
+    return(nandict)
+
+
+def get_nan_plot(nandict):
+    """ """
+
+    stypes = []
+    for stype, nandata in nandict.items():
+        cnt = len(nandata["yesdata"])
+        if cnt!=0:
+            stypes.append((stype, nandata["summary"], cnt))
+
+    if len(stypes)==1:
+        df = stypes[0][1]
+        df.T.plot.barh(stacked=True, colormap="tab20c", figsize=(10,5))
+        plt.legend(ncol=legend_ncols(df), title="sample")
+    else:
+        st = sorted(stypes, key=lambda x: x[2], reverse=True)
+        fig, axs = plt.subplots(
+            nrows=len(st), 
+            gridspec_kw={'height_ratios': [i[2] for i in st]}, 
+            **figure_args)
+        for i, d in enumerate(st):
+            d[1].T.plot.barh(ax=axs[i],**bar_args)
+        fig.tight_layout()
+        axs[0].legend(ncol=legend_ncols(st[0][1]), title="sample")
+        axs[0].set_title("n observations by dataset")
+
+    plt.show()
+
 
 # ----------------------------------------------------------------------------
 # app
@@ -351,74 +463,37 @@ layer_header = [
     "xr"
 ]
 
-ignorevars = ["time","stat","sample","lat","lon"]
 
-
-def get_colors(n, cmap=cm.Set3):
+def get_output_layout(w="95%", b="1px solid lightgray"):
     """ """
-
-    cspace = np.linspace(0.0, 1.0, n)           # 1
-    rgb = cmap(cspace)                          # 2
-    cols = [colors.to_hex(c[0:3]) for c in rgb] # 3
-
-    return(cols)
-
-def from_geojson(input_geojson):
-    """ """
-    with open(input_geojson, "r") as f:
-        shapes = json.load(f)
-    features = shapes["features"]
-    cols = get_colors(len(features))
-    return((features, cols))
-
-def get_plottable(xds):
-    """ """
-    plotvars = []
-    for v in list(xds.variables):
-        if v not in ignorevars:
-            if not allnan(xds[v]):
-                plotvars.append(v)
-    return(plotvars)
-
-def get_active_samples(layer):
-    """ """
-    on = []
-    for sample in layer.samples.samp:
-        if sample.on:
-            on.append(sample.id)
-    return(on)
+    return({"width": w, "border": b})
 
 
 class JupyterSMV(object):
     """App."""
 
 
-    def __init__(self, in_features=None, mpl_notebook=False):
+    def __init__(self, primary=None, ancillary=None, freedom=False):
 
         self.polys = LayerGroup()
         self.points = LayerGroup()
-        self.mapw = Map(layers=(bmap, self.polys, self.points,), **map_args)
+        self.apolys = LayerGroup()
+        self.mapw = Map(
+            layers=(bmap, self.polys, self.points, self.apolys,), **map_args)
 
         self.submit = Button(**submit_args)
         self.submit.on_click(self.submit_handler)
         self.progress = IntProgress(**progress_args)
+        
+        if primary:                                   # if given, 
+            self.load_features(primary)               # load input features
+        if ancillary:
+            self.load_ancillary(ancillary)
 
         layout = [self.mapw, HBox([self.submit, self.progress])]
-
-        if mpl_notebook:
-            self.init_plotter = self.live_plot
-            self.fig, self.axs = plt.subplots(3,1)
-        else:
-            self.init_plotter = self.static_plot
-            self.out1, self.out2 = Output(), Output()
-            self.out1.layout = {"width":"70%"}
-            self.out2.layout = {"width":"30%"}
-            layout = layout + [HBox([self.out1, self.out2])]
-        
-        if in_features:                               # if given, 
-            self.load_features(in_features)           # load input features
-
-        self.ui = VBox(layout)
+        self.out1 = Output(layout=get_output_layout(w="80%"))
+        self.out2 = Output(layout=get_output_layout(w="20%"))
+        self.ui = VBox(layout + [HBox([self.out1, self.out2])])
 
 
     def load_features(self, infeats):
@@ -445,6 +520,13 @@ class JupyterSMV(object):
         self.selected = None
 
 
+    def load_ancillary(self, infeats):
+        """ """          
+        self.alayers = get_ancillary_data(infeats)
+        for layer in self.alayers.layer:
+            self.apolys.add_layer(layer)
+
+
     def submit_handler(self, b):
         """Resets UI and sends requests to SMV when new submit."""
         
@@ -454,17 +536,23 @@ class JupyterSMV(object):
         self.progress.min = 0                      # reset progress bar
         self.progress.max = len(sample)
         self.progress.value = 0
-
+        
         for s in sample:                           # loop over sample pts
             self.progress.value += 1               # update progress bar
             s.update(**pt_status_on)               # update style
             s.submit()                             # download the data
-            s.pt.on_click(self.init_plotter)
-        xrds = xr.concat([s.xr for s in sample], "sample")
-        self.layers.at[self.selected,"xr"] = xrds  # make xr dataset
-
         layer_row.layer.dl = True                  # set dl status to True
-        self.init_plotter()
+        
+        xrds = xr.concat([s.xr for s in sample], "sample")
+        lnan = get_nan_summary(xrds)
+        self.layers.at[self.selected,"xr"] = xrds  # make xr dataset
+        self.layers.iloc[self.selected].layer.nan = lnan
+
+        self.out1.clear_output(); self.out2.clear_output()
+        with self.out1:                            # display a summary of nan
+            get_nan_plot(lnan)
+        with self.out2:
+            print(site_details.format(**layer_row.layer.details))
 
 
     def layer_click_handler(self, **kwargs): 
@@ -482,94 +570,13 @@ class JupyterSMV(object):
         self.points.add_layer(layer_row["points"]) 
         self.mapw.center = (layer_inst.lat, layer_inst.lon)
         self.mapw.zoom = 9
+        self.submit.disabled = True if layer_inst.dl else False
 
-        if layer_inst.dl:
-            self.init_plotter()
-            self.submit.disabled = True
-        else:
-            self.submit.disabled = False
-
-    # ------------------------------------------------------------------------
-
-    def static_plot(self, event=None, type=None, coordinates=None):
-        """ """
-
-        lyr = self.layers.iloc[self.selected]
-        xds = lyr.xr 
-
-        # xds dimension filter
-        active_samples = get_active_samples(lyr)
-        dimension_filter = dict(stat="Mean", sample=active_samples)
-        xdsf = xds.sel(dimension_filter)
-
-        # get plottable variables
-        plottable = get_plottable(xdsf)
-        xdsf = xdsf[plottable]
-
-        fig, axs = plt.subplots(nrows=3, ncols=1, figsize=(9, 8))
-
-        # USFS productivity statistics ---------------------------------------
-
-        st, et = xdsf.time.data[0], xdsf.time.data[-1]   # xds time bounds
-
-        stats = lyr.layer.stats.loc[st:et]
-        stats.MEAN.plot(color="black", ax=axs[0])
-        (stats.MEAN-stats.STD).plot(color="black", ls=":", ax=axs[0])
-        (stats.MEAN+stats.STD).plot(color="black", ls=":", ax=axs[0])
-
-        # SMV datasets -------------------------------------------------------
-
-        xdsf_surf = xdsf.filter_by_attrs(soil_zone="surface")
-        xdsf_root = xdsf.filter_by_attrs(soil_zone="rootzone")
-        for d in xdsf_surf:
-            xd = xdsf_surf[d].mean("sample").dropna("time", how="all")
-            xd.plot.line(x='time', ax=axs[1])
-        for d in xdsf_root:
-            xd = xdsf_root[d].mean("sample").dropna("time", how="all")
-            xd.plot.line(x='time', ax=axs[2])
-
-        # draw ---------------------------------------------------------------
-
-        axdata = [("primary productivity", "kgC/m2"),
-                ("volumetric soil moisture: surface", "m3/m3"),
-                ("volumetric soil moisture: rootzone", "m3/m3")]
-        for i, a in enumerate(axdata):
-            axs[i].set_title(a[0]); axs[i].set_ylabel(a[1])
-
-        fig.tight_layout()
         self.out1.clear_output(); self.out2.clear_output()
-        with self.out1:
-            plt.show()
+        with self.out1:                             # display nan summary
+            if layer_row.layer.dl:
+                get_nan_plot(layer_row.layer.nan)
+            else:
+                display(HTML(download_msg))
         with self.out2:
-            print(site_details.format(**lyr.layer.details))
-
-
-    def live_plot(self):
-        print("Re-implement.")
-
-    """
-        lyr = self.layers.iloc[self.selected]
-        xds = lyr.xr
-        plotvars = get_plottable(xds)
-
-        mean = lyr.layer.stats.GPP_mean                        # USFS -->> 
-        std = lyr.layer.stats.GPP_std
-        mean.plot(color="black", ax=self.axs[2])
-        (mean-std).plot(color="black", ls=":", ax=self.axs[2])
-        (mean+std).plot(color="black", ls=":", ax=self.axs[2]) # <<-- USFS
-
-        def update(Dataset, Statistic):
-            """ """
-            Samples = get_active_samples(lyr)
-            select = dict(stat=Statistic, sample=Samples)
-            self.axs[0].clear(); self.axs[1].clear(); self.axs[2].clear()
-            xds[Dataset].sel(select).plot.line(x='time', ax=self.axs[0])
-            xds[Dataset].sel(select).mean("sample").plot.line(x='time', ax=self.axs[1])
-            self.fig.canvas.draw()
-
-        widgets = dict(Dataset=plotvars, Statistic=["Mean","Min","Max"])
-        p = interactive(update, **widgets)
-        display(p)
-    """
-
-
+            print(site_details.format(**layer_inst.details))

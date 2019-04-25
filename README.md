@@ -1,4 +1,4 @@
-# usfs-workshop-example
+# nasa_usfs_workshop
 Temporary repository.
 
 Click this to launch a binder:

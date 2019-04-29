@@ -353,9 +353,7 @@ def get_ancillary_data(geojson):
     layers = []                                       # a temporary list 
     for i, feat in enumerate(features):               # loop over features
         lyrd = get_layer_data(i, feat, opac=0, samp=False)
-        lyrm = GeoJSON(
-            data=lyrd[0], 
-            hover_style={"color": cols[i], "fillOpacity": 0.1})
+        lyrm = GeoJSON(data=lyrd[0], hover_style={"color": cols[i]})
         layers.append((i, lyrd[2], lyrd[3], lyrm, lyrd[5]))
     layers = pd.DataFrame(layers, columns=["id","lat","lon","layer","attrs"])
 
@@ -501,10 +499,14 @@ class Sample(object):
         self.on = False if self.on else True              # toggle status
 
 
-    def submit(self):
+    def submit(self, session=None):
         """Called by parent. Downloads url. Updates status."""
-        
-        self.response = requests.get(self.dl, cookies=auth)# download
+
+        if session:
+            self.response = session.get(self.dl)
+        else:
+            self.response = requests.get(self.dl, cookies=auth)
+
         self.df = txt_to_pd(self.response.text)            # read to df
         self.xr = get_sample_xr(self)                      # get xr dataset
         self.pt.on_click(self.toggle)                      # callback toggle
@@ -689,16 +691,15 @@ class Plotter:
             HTML("<b>Datasets: </b>"),
             self.chkbxoutput
         ], layout=Layout(
-            width="30%",
+            width="20%",
             display='flex',
             flex_flow='column',
-            align_items='stretch',
-            border="1px solid gray"))
+            align_items='stretch'))
 
         # --------------------------------------------------------------------
         # ui
         
-        self.output = Output(layout={"border": "1px solid gray", "width": "auto"})
+        self.output = Output(layout={"width": "auto"})
         self.ui = HBox([self.selectui, self.output])
         self.to_output()
         
@@ -801,7 +802,9 @@ class JupyterSMV(object):
     """)
     
     
-    def __init__(self, primary=None, anc=None, nan=False, free=False):
+    def __init__(self, primary=None, anc=None, session=None):
+
+        self.session = session
 
         self.polys = LayerGroup()
         self.points = LayerGroup()
@@ -901,7 +904,7 @@ class JupyterSMV(object):
         self.progress.value = 0
         
         for s in sample:                           # loop over sample pts
-            s.submit()                             # download the data
+            s.submit(session=self.session)         # download the data
             self.progress.value += 1               # update progress bar
             s.update(**s.symbology)                # update style
         layer_row.layer.dl = True                  # set dl status to True

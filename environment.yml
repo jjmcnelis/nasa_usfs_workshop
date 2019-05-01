@@ -12,4 +12,5 @@ dependencies:
   - ipywidgets
   - shapely
   - matplotlib
+  - ipympl
   

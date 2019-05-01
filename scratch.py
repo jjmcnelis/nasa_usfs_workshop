@@ -1,3 +1,72 @@
+def get_nan_summary(xrdataset): 
+    """ """
+    nandict = {"in situ": {}, "airborne": {}, "spaceborne": {}}
+
+    for pt in nandict.keys():
+
+        # get the datasets for the current platform
+        pds = xrdataset.filter_by_attrs(type=pt).sel(stat="Mean", drop=True)
+        timelen, samplelen = pds.time.size, pds.sample.size
+        potential_obs_count = timelen*samplelen
+
+        # get variables with nodata; variables with data; valid counts
+        nodata, yesdata, obscount = [], [], {}
+        for name, dataset in pds.items():
+            if allnan(dataset):
+                nodata.append(name)
+            else:
+                yesdata.append(name)
+                obscount[name], obstotal = [], 0
+                for i in range(samplelen):
+                    samp = dataset.sel(sample=i)
+                    count = numvalid(samp)
+                    obscount[name].append(count) #/potential_obs_count*100
+                    obstotal += count
+                obscount[name].append(potential_obs_count-obstotal)
+        
+        # update summary dictionary
+        ix = list(range(samplelen))+["nan"]   
+        nandict[pt].update({                      
+            "nodata": nodata, 
+            "yesdata": yesdata, 
+            "summary": pd.DataFrame(obscount, index=ix)})
+
+    return(nandict)
+    
+
+def get_output_layout(w="95%", b="1px solid lightgray"):
+    """ """
+    return({"width": w, "border": b})
+
+
+def get_options(xrds, attribute):
+    """ """
+    
+    options = []
+    for name, xrda in xrds.items():
+        isnull = xrda.isnull().data.all()
+        isignore = name in ignore_variables
+        if not any([isnull, isignore]):
+            option = name if attribute=="dataset" else xrda.attrs[attribute]
+            options.append(option)
+            
+    return(sorted(list(set(options))))  
+
+
+def get_checkboxes(xrds, group):
+    """ """
+
+    checkboxes = [Checkbox(
+        description=str(o), 
+        value=True, 
+        indent=False,
+        layout=Layout(width='auto')
+    ) for o in get_options(xrds, group)]
+    
+    return(checkboxes)
+
+
+
 class Plotter:
     """Generates the map/plot side-by-side widget container."""
     

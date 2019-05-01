@@ -61,8 +61,57 @@ COUNT:    {COUNT}
 #{FORESTNAME} ({FORESTNUMB})
 #{DISTRICTNA} ({DISTRICTNU})
 
-# ----------------------------------------------------------------------------
-# widget settings
+numvalid = lambda v: np.count_nonzero(~np.isnan(v.data))
+allnan = lambda v: numvalid(v)==0
+
+latatts = dict(
+    standard_name="latitude",
+    long_name="sample latitude",
+    units="degrees_north")
+
+lonatts = dict(
+    standard_name="latitude",
+    long_name="sample latitude",
+    units="degrees_north")
+
+pt_style = dict(
+    radius=6, 
+    stroke=False,
+    fill_opacity=0.6, 
+    fill_color="black")
+
+# ease data
+latf = "docs/EASE2_M09km.lats.3856x1624x1.double"
+lonf = "docs/EASE2_M09km.lons.3856x1624x1.double"
+
+lats = np.fromfile(latf, dtype=np.float64).flatten() 
+lons = np.fromfile(lonf, dtype=np.float64).flatten()
+crds = np.dstack((lats,lons))[0]
+
+sample_header = [
+    "id",
+    "lat",
+    "lon",
+    "samp"
+]
+
+layer_header = [
+    "id",
+    "lat",
+    "lon",
+    "layer",
+    "samples",
+    "points",
+    "xr"
+]
+
+figure_args = dict(ncols=1, sharex=True, figsize=(10,5))
+bar_args = dict(stacked=True, colormap="tab20c", legend=False)
+legend_ncols = lambda df: ceil(len(df.index)/10)   
+download_msg = """<p style="text-align:center;">
+Click <b>Submit</b> to download Soil Moisture Visualizer data for this site.
+<br></p>"""
+
 
 bmap = mwg.basemap_to_tiles(mwg.basemaps.Esri.WorldImagery)    # map widget 
 map_args = dict(
@@ -79,6 +128,8 @@ progress_args = dict(                                          # progress bar
     description="Progress: ", 
     layout=Layout(width="95%"))
 
+# ----------------------------------------------------------------------------
+
 
 def poly_mapper(lyr, mw="25%", ow="75%", zoom=8):
     """Generates the map/plot side-by-side widget container."""
@@ -89,8 +140,6 @@ def poly_mapper(lyr, mw="25%", ow="75%", zoom=8):
     
     return((m,o))
 
-
-# ----------------------------------------------------------------------------
 
 def get_colors(n, cmap=cm.Set3):
     """ 
@@ -127,25 +176,6 @@ def get_ease(shapely_geom):
 
 # ----------------------------------------------------------------------------
 # SMV sample dataset formatters
-
-numvalid = lambda v: np.count_nonzero(~np.isnan(v.data))
-allnan = lambda v: numvalid(v)==0
-
-latatts = dict(
-    standard_name="latitude",
-    long_name="sample latitude",
-    units="degrees_north")
-
-lonatts = dict(
-    standard_name="latitude",
-    long_name="sample latitude",
-    units="degrees_north")
-
-pt_style = dict(
-    radius=6, 
-    stroke=False,
-    fill_opacity=0.6, 
-    fill_color="black")
 
 
 def txt_to_pd(response_text):
@@ -202,15 +232,6 @@ def get_sample_xr(samp):
     return(xds)
 
 
-# ease data
-latf = "docs/EASE2_M09km.lats.3856x1624x1.double"
-lonf = "docs/EASE2_M09km.lons.3856x1624x1.double"
-
-lats = np.fromfile(latf, dtype=np.float64).flatten() 
-lons = np.fromfile(lonf, dtype=np.float64).flatten()
-crds = np.dstack((lats,lons))[0]
-
-
 def from_geojson(input_geojson):
     """ """
     with open(input_geojson, "r") as f:
@@ -218,26 +239,6 @@ def from_geojson(input_geojson):
     features = shapes["features"]
     cols = get_colors(len(features))
     return((features, cols))
-
-
-def get_ease(shapely_geom):
-    """ """
-
-    bnds = shapely_geom.bounds 
-    ease = crds[
-        (bnds[1]<lats) & (lats<bnds[3]) &     # ybnds < lat < ybnds
-        (bnds[0]<lons) & (lons<bnds[2])]      # xbnds < lon < xbnds
-
-    ease_reduced = []
-    for p in ease:
-        shapely_pt = shape({                  # input to shapely.shape is a
-            "type": "Point",                  # python dict equivalent of
-            "coordinates": (p[1], p[0])})     # geojson point geometry
-        
-        if shapely_geom.contains(shapely_pt): # if point inside poly
-            ease_reduced.append([p[0], p[1]]) # return lat, lon tuple
-
-    return(ease_reduced)
 
 
 def get_properties(prop):
@@ -254,7 +255,7 @@ def get_properties(prop):
         else:
             pass
     yr = pd.date_range(
-        start="1985",
+        start="1984",
         freq="1Y",
         periods=len(stats["MEAN"]))
     stats = pd.DataFrame(stats, index=yr)
@@ -320,30 +321,6 @@ def get_symbology(typebool):
 # ----------------------------------------------------------------------------
 # other helpers
 
-sample_header = [
-    "id",
-    "lat",
-    "lon",
-    "samp"
-]
-
-layer_header = [
-    "id",
-    "lat",
-    "lon",
-    "layer",
-    "samples",
-    "points",
-    "xr"
-]
-
-figure_args = dict(ncols=1, sharex=True, figsize=(10,5))
-bar_args = dict(stacked=True, colormap="tab20c", legend=False)
-legend_ncols = lambda df: ceil(len(df.index)/10)   
-download_msg = """<p style="text-align:center;">
-Click <b>Submit</b> to download Soil Moisture Visualizer data for this site.
-<br></p>"""
-
 
 def get_ancillary_data(geojson):
     """ """
@@ -359,74 +336,6 @@ def get_ancillary_data(geojson):
     return(layers)
 
 
-def get_nan_summary(xrdataset): 
-    """ """
-    nandict = {"in situ": {}, "airborne": {}, "spaceborne": {}}
-
-    for pt in nandict.keys():
-
-        # get the datasets for the current platform
-        pds = xrdataset.filter_by_attrs(type=pt).sel(stat="Mean", drop=True)
-        timelen, samplelen = pds.time.size, pds.sample.size
-        potential_obs_count = timelen*samplelen
-
-        # get variables with nodata; variables with data; valid counts
-        nodata, yesdata, obscount = [], [], {}
-        for name, dataset in pds.items():
-            if allnan(dataset):
-                nodata.append(name)
-            else:
-                yesdata.append(name)
-                obscount[name], obstotal = [], 0
-                for i in range(samplelen):
-                    samp = dataset.sel(sample=i)
-                    count = numvalid(samp)
-                    obscount[name].append(count) #/potential_obs_count*100
-                    obstotal += count
-                obscount[name].append(potential_obs_count-obstotal)
-        
-        # update summary dictionary
-        ix = list(range(samplelen))+["nan"]   
-        nandict[pt].update({                      
-            "nodata": nodata, 
-            "yesdata": yesdata, 
-            "summary": pd.DataFrame(obscount, index=ix)})
-
-    return(nandict)
-
-
-def get_output_layout(w="95%", b="1px solid lightgray"):
-    """ """
-    return({"width": w, "border": b})
-
-
-def get_options(xrds, attribute):
-    """ """
-    
-    options = []
-    for name, xrda in xrds.items():
-        isnull = xrda.isnull().data.all()
-        isignore = name in ignore_variables
-        if not any([isnull, isignore]):
-            option = name if attribute=="dataset" else xrda.attrs[attribute]
-            options.append(option)
-            
-    return(sorted(list(set(options))))
-    
-
-def get_checkboxes(xrds, group):
-    """ """
-
-    checkboxes = [Checkbox(
-        description=str(o), 
-        value=True, 
-        indent=False,
-        layout=Layout(width='auto')
-    ) for o in get_options(xrds, group)]
-    
-    return(checkboxes)
-
-
 def fDaymet(xrds, Interval=None, Stack=False):
     """ """
     
@@ -436,7 +345,7 @@ def fDaymet(xrds, Interval=None, Stack=False):
     
     if (Stack) & (Interval!="year"):
         for i, l in enumerate(series):
-            series[i][0] = series[i][0].mean("year", skipna=True)
+            series[i][0] = series[i][0].mean("year")
             series[i][2]["x"] = Interval
     
     fmt0 = [lambda a: a.grid("on", alpha=0.5),
@@ -456,7 +365,7 @@ def fProductivity(xrds, Interval=None, Stack=False):
     
     if (Stack) & (Interval!="year"):
         for i, l in enumerate(series):
-            series[i][0] = series[i][0].mean("year", skipna=True)
+            series[i][0] = series[i][0].mean("year")
             series[i][2]["x"] = Interval
     
     fmt0 = [lambda a: a.grid("on", alpha=0.5),
@@ -475,7 +384,7 @@ def fSoilMoisture(xrds, Interval=None, Stack=False):
     series = []
     for d in ["surface", "rootzone"]:
         ds = xrds.filter_by_attrs(soil_zone=d)
-        ds = xr.concat(ds.values(), "mean").mean("mean", skipna=True)
+        ds = xr.concat(ds.values(), "mean").mean("mean")
         
         p = [ds, 0, dict(label=d+" mean")]
         if (Stack)&(Interval!="year"):
@@ -501,7 +410,7 @@ def fSoilMoisture(xrds, Interval=None, Stack=False):
 class Plotter:
     """Generates the map/plot side-by-side widget container."""
     
-    error = HTML("""<p>Selections cannot be plotted <b>""" 
+    error = HTML("""<p>Selections can't be plotted <b>""" 
                  """(probably time slider)</b>.</p>""")
     wait = HTML("""<p style="position:relative;top:50%;transform:translateY"""
                 """(-50%);">Calculating statistics. Please be patient.</p>""")
@@ -581,7 +490,6 @@ class Plotter:
                 grid_template_areas='''"self.mapw self.fig.canvas"'''))
         
         self.ui = VBox([self.selections, self.outputs])
-        display(self.ui)
         
         # --------------------------------------------------------------------        
         # trigger draw
@@ -627,15 +535,15 @@ class Plotter:
         # filter to dataset-level
         dfilter, dfunc = self.dataset_keys[self.dsel.value]
         ds = ds.filter_by_attrs(**dfilter)
-        ds = ds.mean("sample", skipna=True, keep_attrs=True)
+        ds = ds.mean("sample", keep_attrs=True)
         
         # aggregate to interval and 
         intvlstr, stackstr = self.interval_keys[interval]
         if interval!="day":
-            ds = ds.resample(time="1"+intvlstr).mean(skipna=True, keep_attrs=True) 
+            ds = ds.resample(time="1"+intvlstr).mean(keep_attrs=True) 
             
         ds.coords["year"] = ds.time.dt.year
-        sfunc = lambda x: x.groupby(interval).mean(skipna=True, keep_attrs=True)
+        sfunc = lambda x: x.groupby(interval).mean(keep_attrs=True)
         if stack:
             ds.coords[interval] = getattr(ds.time.dt, stackstr)
             ds = ds.groupby("year").apply(sfunc)
@@ -741,11 +649,6 @@ class Layer(object):
     def update(self, **kwargs):
         for arg, val in kwargs.items():
             setattr(self.layer, arg, val)
-    
-    #def getui(self):
-        #""" """
-        #self.nan = get_nan_summary(self.xr)
-        #self.opt = get_options(self.xr)
        
             
 class JupyterSMV(object):
@@ -795,14 +698,15 @@ class JupyterSMV(object):
         
         # -------------------------------------------------------------------
         
-        self.plotui = Output()
-        self.body = Accordion(
-            children=[self.downloadui, self.plotui], 
-            layout=Layout(width="auto", height="80%"))
-        self.body.set_title(0, '1. Download')
-        self.body.set_title(1, '2. Plot')
-        self.ui = VBox([self.head,  self.body])
+        #self.plotui = Output()
+        #self.body = Accordion(
+        #    children=[self.downloadui, self.plotui], 
+        #    layout=Layout(width="auto", height="80%"))
+        #self.body.set_title(0, '1. Download')
+        #self.body.set_title(1, '2. Plot')
+        #self.ui = VBox([self.head,  self.body])
         
+        self.ui = self.downloadui
         display(self.ui)
 
     def load_features(self, infeats):
@@ -875,8 +779,8 @@ class JupyterSMV(object):
         xrds = xr.concat([s.xr for s in sample], "sample") # make xr dataset
         layer_row.layer.xr = xrds
         self.layers.at[self.selected,"xr"] = xrds 
-        self.body.selected_index = 1
+        #self.body.selected_index = 1
 
-        with self.plotui:
-            Plotter(self.layers.iloc[i])
-
+        #with self.plotui:
+            #p = Plotter(self.layers.iloc[i])
+            #display(p.ui)

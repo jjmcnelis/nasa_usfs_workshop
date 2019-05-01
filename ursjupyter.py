@@ -39,7 +39,7 @@ class EarthdataLogin(requests.Session):
                 response = self.get(self.TEST)        # try to grab TEST
                 response.raise_for_status()           # raise for status>400
                 clear_output()                        # clear output
-                display("Login successful. Download with `session.get(url)`.")
+                display("Login successful. Download with: session.get(url)")
                 break
 
             except requests.exceptions.HTTPError as e:

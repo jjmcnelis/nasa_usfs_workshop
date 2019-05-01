@@ -17,8 +17,8 @@ from IPython.display import display
 
 import ipyleaflet as mwg
 from ipyleaflet import Map, LayerGroup, GeoJSON, CircleMarker, WidgetControl
-from ipywidgets import RadioButtons, Checkbox, Box, Accordion, IntSlider, Text, Dropdown, ToggleButton
-from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML, interactive, Image
+from ipywidgets import RadioButtons, Checkbox, Box, Accordion, IntSlider, Text, Dropdown, ToggleButton, GridBox
+from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML, interactive, Image, SelectionRangeSlider
 
 
 disabled_sources =  ["FLUXNET", "MODIS", "GRACE"]
@@ -27,22 +27,18 @@ ignore_variables = ["sample","time","stat","lat","lon"] # "PBOH2O"
 # ----------------------------------------------------------------------------
 # app settings
 
-#font = {"family": "normal", "weight": "normal", "size": 16}  # matplotlib ->
-#plt.rcParams['figure.figsize'] = [14, 5]
-#plt.rc("font", **font) # <- some matplotlib settings
+plt.ioff()
+plt.clf()
+font = {'family': 'normal', 'weight': 'normal', 'size': 8}
+plt.rc('font', **font)
 
 warnings.filterwarnings('ignore')
-auth = dict(ORNL_DAAC_USER_NUM=str(32863))
 
-smvdownload = "https://daac.ornl.gov/cgi-bin/viz/download.pl?"
+smvdownload = "https://airmoss.ornl.gov/cgi-bin/viz/api/download.pl?"
 smvdatasets = pd.read_csv(
     "docs/smvdatasets.csv", 
     index_col="dataset", 
     header=0)
-
-obslegend = open("docs/img/obslegend2.png", "rb")
-obslegendimg = obslegend.read()
-obslegendwg = Image(value=obslegendimg, format='png', width=125, height=75)
 
 # usfs shapefile fields; only applies to Yaxing's workshop -->>
 fields = [
@@ -303,8 +299,7 @@ def get_null_summary(xrdataset):
 
 def get_symbology(typebool):
     """ """
-    style = {#"fill_color": "#cbd5e8", 
-             "fill_opacity": 0.4, 
+    style = {"fill_opacity": 0.4, 
              "color":"white",
              "stroke": True, 
              "weight": 1}
@@ -314,7 +309,11 @@ def get_symbology(typebool):
             "fill_opacity": 0.8, 
             "radius": 8})
     if typebool["airborne"]:
-        style.update({"color": "#377eb8", "stroke": True, "radius": 8})
+        style.update({
+            "color": "#377eb8", 
+            "stroke": True, 
+            "weight": 3,
+            "radius": 8})
     return(style)
 
 
@@ -365,24 +364,6 @@ def get_nan_summary(xrdataset):
     nandict = {"in situ": {}, "airborne": {}, "spaceborne": {}}
 
     for pt in nandict.keys():
-
-        # for percentage: ----------------------------------------------------
-        """# get the datasets for the current platform
-        ds = xrds.filter_by_attrs(type=pt).sel(stat="Mean", drop=True)
-
-        # get fraction of null dataset by timestep for all samples
-        dsnull = ds.isnull()
-
-        # get variables with nodata; variables with data; valid counts
-        nodata, yesdata, data = [], [], {}
-        for name, dataset in dsnull.items():
-            if dataset.data.all(): #dataset.isnull().mean()==1
-                nodata.append(name)
-            else:
-                yesdata.append(name)
-                dataset.data = np.logical_not(dataset.data)
-                data[name] = dataset.mean("sample").data"""
-        # --------------------------------------------------------------------
 
         # get the datasets for the current platform
         pds = xrdataset.filter_by_attrs(type=pt).sel(stat="Mean", drop=True)
@@ -446,37 +427,251 @@ def get_checkboxes(xrds, group):
     return(checkboxes)
 
 
-def get_plot(xrds):
+def fDaymet(xrds, Interval=None, Stack=False):
     """ """
     
-    units = get_options(xrds, "units")
-    sources = get_options(xrds, "source")
+    series = [[xrds.tmin, 0, dict(color="darkorange", label="avg min temp")],
+              [xrds.tmax, 0, dict(color="darkgreen", label="avg max temp")],
+              [xrds.prcp, 1, dict(color="purple", label="avg rate of precip")]]
     
-    fig, axs = plt.subplots(nrows=len(units), ncols=1, sharex=True, figsize=(20,12))
-    plt.subplots_adjust(hspace=0.000)
+    if (Stack) & (Interval!="year"):
+        for i, l in enumerate(series):
+            series[i][0] = series[i][0].mean("year", skipna=True)
+            series[i][2]["x"] = Interval
     
-    for i, u in enumerate(units):
-        x = xrds.filter_by_attrs(units=u)
-        ax = axs[i] if len(units)>1 else axs
-        for n, d in x.items():
-            d.mean("sample").plot.line(
-                x="time", 
-                label=n, 
-                ax=ax, 
-                add_legend=False)
-        ax.set_xlabel(None)
-        ax.set_ylabel(str(u))
-        ax.set_title(None)
-        ax.legend(loc=0, framealpha=1)
+    fmt0 = [lambda a: a.grid("on", alpha=0.5),
+            lambda a: a.legend(loc="upper left"),
+            lambda a: a.set_ylabel("degrees Celsius")]
+    fmt1 = [lambda a: a.legend(loc="upper right"), 
+            lambda a: a.set_ylabel("mm/day")] 
 
-    plt.show()
+    return((series, fmt0, fmt1))
+
+
+def fProductivity(xrds, Interval=None, Stack=False):
+    """ """
+    
+    series = [[xrds.GPP_mean, 0, dict(color="darkorange", label="GPP")],
+              [xrds.NEE_mean, 0, dict(color="darkgreen", label="NEE")]]
+    
+    if (Stack) & (Interval!="year"):
+        for i, l in enumerate(series):
+            series[i][0] = series[i][0].mean("year", skipna=True)
+            series[i][2]["x"] = Interval
+    
+    fmt0 = [lambda a: a.grid("on", alpha=0.5),
+            lambda a: a.legend(loc="upper left"),
+            lambda a: a.set_ylabel("g m-2 d-1")]
+    fmt1 = [lambda a: a.set_title(None)]
+
+    return((series, fmt0, fmt1))
+
+
+def fSoilMoisture(xrds, Interval=None, Stack=False):
+    """ """
+    
+    fyear = lambda x: x.sel(year=np.unique(x.year)).mean("year")
+    
+    series = []
+    for d in ["surface", "rootzone"]:
+        ds = xrds.filter_by_attrs(soil_zone=d)
+        ds = xr.concat(ds.values(), "mean").mean("mean", skipna=True)
+        
+        p = [ds, 0, dict(label=d+" mean")]
+        if (Stack)&(Interval!="year"):
+            p[0] = fyear(ds)
+            p[2]["x"] = Interval
+        else:
+            p[2]["x"] = "year" if (Stack)&(Interval=="year") else "time"
             
+        series.append(p) 
+    
+    fmt0 = [lambda a: a.set_title(None),
+            lambda a: a.grid("on", alpha=0.5),
+            lambda a: a.legend(loc="upper left"),
+            lambda a: a.set_ylabel("soil moisture volume (m3/m3)")]
+    fmt1 = [lambda a: a.set_title(None)]
+
+    return((series, fmt0, fmt1))
+
 
 #-----------------------------------------------------------------------------
 
+
+class Plotter:
+    """Generates the map/plot side-by-side widget container."""
+    
+    error = HTML("""<p>Selections cannot be plotted <b>""" 
+                 """(probably time slider)</b>.</p>""")
+    wait = HTML("""<p style="position:relative;top:50%;transform:translateY"""
+                """(-50%);">Calculating statistics. Please be patient.</p>""")
+    
+    dataset_keys = {
+        "Soil Moisture": (dict(units="m3/m3"), fSoilMoisture),
+        "SMAP GPP/NEE": (dict(units="g m-2 d-1"), fProductivity),
+        "Daymet": (dict(source="Daymet"), fDaymet)}
+    
+    interval_keys = {
+        "day": ("d", "dayofyear"), 
+        "week": ("w", "week"), 
+        "month": ("m", "month"), 
+        "year": ("y", "year")}
+
+    
+    def __init__(self, layer): 
+
+        self.layer = layer        
+        self.xr = layer.xr.sel(stat="Mean", drop=True)
+        self.time = pd.to_datetime(self.xr.time.data).strftime("%Y-%m-%d")
+        self.samp = layer.samples.samp.tolist()
+
+        # --------------------------------------------------------------------
+        # init widgets and set interactivity
+
+        self.dsel = Dropdown(
+            options=["Soil Moisture", "SMAP GPP/NEE", "Daymet"],
+            value="Soil Moisture",
+            layout=Layout(width='auto'))
+        self.dsel.observe(self.handler, names="value")
+        
+        self.intv = Dropdown(
+            options=self.interval_keys.keys(), 
+            value="day",
+            layout=Layout(width='auto'))
+        self.intv.observe(self.handler, names="value")
+        
+        self.stack = ToggleButton(description="Stack", value=False)
+        self.stack.observe(self.update_stack, names="value")
+        
+        self.dtrange = SelectionRangeSlider(
+            options=self.time,
+            value=[self.time[0], self.time[-1]],
+            continuous_update=False,
+            layout=Layout(width="50%"))
+        self.dtrange.observe(self.update_time, names="value")
+        
+        # --------------------------------------------------------------------
+        # construct ui
+        
+        self.fig, self.ax0 = plt.subplots(figsize=(7, 3.5))
+        self.ax1 = self.ax0.twinx()
+        self.fig.tight_layout(pad=2, h_pad=4)
+            
+        self.mapw = Map(
+            layers=(self.layer.layer.layer, layer.points, bmap,), 
+            center=(layer.lat, layer.lon), 
+            zoom=9, attribution_control=False)
+        for p in layer.points.layers:
+            p.on_click(self.update_sample)
+
+        self.selections = Box(
+            children=[self.dsel, self.intv, self.stack, self.dtrange], 
+            layout=Layout(
+                width="100%",
+                display='flex',
+                flex_flow='row',
+                align_items='stretch'))
+        
+        self.outputs = GridBox(
+            children=[self.mapw, self.fig.canvas], 
+            layout=Layout(
+                width='100%',
+                grid_template_rows="auto",
+                grid_template_columns="25% 75%",
+                grid_template_areas='''"self.mapw self.fig.canvas"'''))
+        
+        self.ui = VBox([self.selections, self.outputs])
+        display(self.ui)
+        
+        # --------------------------------------------------------------------        
+        # trigger draw
+        
+        self.handler()
+
+    # ------------------------------------------------------------------------
+    
+    def update_sample(self, **kwargs):
+        """ """
+        self.handler()
+    
+    def update_dataset(self, change):
+        """ """
+        self.dtrange.value = [self.time[0], self.time[-1]]
+        self.handler()
+    
+    def update_stack(self, change):
+        """ """
+        stack = change.new
+        if stack: 
+            self.dtrange.disabled = True
+        else: 
+            self.dtrange.disabled = False
+        self.handler()
+
+    def update_time(self, change):
+        """ """
+        start, end = change.new
+        self.ax0.set_xlim(start, end)
+        self.fig.canvas.draw()
+        
+    def handler(self, change=None):
+        """ """
+        dataset = self.dsel.value
+        interval = self.intv.value
+        stack = self.stack.value
+        
+        # select toggled-on samples
+        samp = [s.id for s in self.samp if s.on]
+        ds = self.xr.sel(sample=samp)
+        
+        # filter to dataset-level
+        dfilter, dfunc = self.dataset_keys[self.dsel.value]
+        ds = ds.filter_by_attrs(**dfilter)
+        ds = ds.mean("sample", skipna=True, keep_attrs=True)
+        
+        # aggregate to interval and 
+        intvlstr, stackstr = self.interval_keys[interval]
+        if interval!="day":
+            ds = ds.resample(time="1"+intvlstr).mean(skipna=True, keep_attrs=True) 
+            
+        ds.coords["year"] = ds.time.dt.year
+        sfunc = lambda x: x.groupby(interval).mean(skipna=True, keep_attrs=True)
+        if stack:
+            ds.coords[interval] = getattr(ds.time.dt, stackstr)
+            ds = ds.groupby("year").apply(sfunc)
+
+        self.plot_config = dfunc(ds, Interval=interval, Stack=stack)
+        try:
+            self.plotter()
+        except:
+            print("Something went wrong. Try again.")
+
+
+    def plotter(self):
+        """ """
+        self.ax0.clear(); self.ax1.clear()
+        
+        series, fmt0, fmt1 = self.plot_config
+        count0,count1 = 0,0
+        for i, s in enumerate(series):
+            x, xax, xargs = s
+            if xax==0: count0 += 1
+            else: count1 += 1
+            ax = self.ax0 if xax==0 else self.ax1
+            x.plot(ax=ax, **xargs)
+        
+        for c in fmt0: c(self.ax0)
+        for c in fmt1: c(self.ax1)
+        if count1==0: self.ax1.axis("off")
+        else: self.ax1.axis("on")
+        
+        self.fig.canvas.draw()
+
+
+
 class Sample(object):
 
-    off = {"fill_color": "#cbd5e8", "fill_opacity": 0.1, "stroke": False}
+    off = {"fill_opacity": 0.4, "stroke": False}
 
     def __init__(self, i, lat, lon):
         """Inits with id,lat,lon; makes request string, map point."""
@@ -499,14 +694,10 @@ class Sample(object):
         self.on = False if self.on else True              # toggle status
 
 
-    def submit(self, session=None):
+    def submit(self, session):
         """Called by parent. Downloads url. Updates status."""
 
-        if session:
-            self.response = session.get(self.dl)
-        else:
-            self.response = requests.get(self.dl, cookies=auth)
-
+        self.response = session.get(self.dl)
         self.df = txt_to_pd(self.response.text)            # read to df
         self.xr = get_sample_xr(self)                      # get xr dataset
         self.pt.on_click(self.toggle)                      # callback toggle
@@ -541,255 +732,21 @@ class Layer(object):
         self.dl = False    # downloaded or nah?
         self.on = False    # toggle on or nah?
 
-
     def toggle(self, **kwargs):
         """Routine for when a new USFS polygon is selected."""
         if list(kwargs.keys()) != ['event', 'properties']: # check event
             return(None)                                   # skip basemap
         self.on = False if self.on else True               # update status
         
-
     def update(self, **kwargs):
         for arg, val in kwargs.items():
             setattr(self.layer, arg, val)
     
-    def getui(self):
-        """ """
-        self.nan = get_nan_summary(self.xr)
+    #def getui(self):
+        #""" """
+        #self.nan = get_nan_summary(self.xr)
         #self.opt = get_options(self.xr)
-
-def get_options(xrds, attribute):
-    """ """
-    
-    options = []
-    for name, xrda in xrds.items():
-        isnull = xrda.isnull().data.all()
-        isignore = name in ignore_variables
-        if not any([isnull, isignore]):
-            option = name if attribute=="dataset" else xrda.attrs[attribute]
-            options.append(option)
-            
-    return(sorted(list(set(options))))
-    
-
-def get_checkboxes(xrds, group):
-    """ """
-
-    checkboxes = [Checkbox(
-        description=str(o), 
-        value=True, 
-        indent=False,
-        layout=Layout(width='auto')
-    ) for o in get_options(xrds, group)]
-    
-    return(checkboxes)
-
-
-def get_plot(xrds):
-    """ """
-    
-    units = get_options(xrds, "units")
-    sources = get_options(xrds, "source")
-    
-    fig, axs = plt.subplots(nrows=len(units), ncols=1, sharex=True, figsize=(20,12))
-    plt.subplots_adjust(hspace=0.000)
-    
-    for i, u in enumerate(units):
-        x = xrds.filter_by_attrs(units=u)
-        ax = axs[i] if len(units)>1 else axs
-        for n, d in x.items():
-            d.mean("sample").plot.line(
-                x="time", 
-                label=n, 
-                ax=ax, 
-                add_legend=False)
-        ax.set_xlabel(None)
-        ax.set_ylabel(str(u))
-        ax.set_title(None)
-        ax.legend(loc=0, framealpha=1)
-
-    plt.show()
-            
-
-class Plotter:
-    """Generates the map/plot side-by-side widget container."""
-    
-    error = HTML("""<p>Please select one or more platform types.</p>""")
-    
-    groups = ["dataset", "source"]
-    intervals = {"day": "d", "week": "w", "month": "m", "year": "y"}
-    
-    def __init__(self, layer, debug=False): 
-
-        self.layer = layer
-        self.debug = debug
-        
-        self.xr = layer.xr.sel(stat="Mean", drop=True)
-        self.filtxr = layer.xr
-
-        # selection container
-        self.selected = dict(
-            interval="day",
-            stack=False,
-            group="dataset",
-            groupoptions={})
-        
-        # --------------------------------------------------------------------
-        # selection ui
-        
-        # platform type options
-        self.selected["type"] = get_options(self.xr, "type")
-        self.platformtypes = Box([], layout=Layout(
-            width="auto",
-            display='flex',
-            flex_flow='column',
-            align_items='stretch'))
-        checkboxes = []
-        for t in self.selected["type"]:
-            chkbx = Checkbox(
-                value=True, 
-                description=t, 
-                indent=False, layout=Layout(width='auto'))
-            chkbx.observe(self.type_handler, names="value")
-            checkboxes.append(chkbx)
-        self.platformtypes.children = checkboxes
-        
-        # interval options
-        self.interval = RadioButtons(
-            options=self.intervals.keys(), 
-            value="day", 
-            layout=Layout(width='auto'))
-        self.interval.observe(self.options_handler, names="value")
-        
-        # dataset options      
-        self.chkbxoutput = Box(
-            children=[], 
-            layout=Layout(
-                height="200px",
-                width="auto",
-                display='flex',
-                flex_flow='column',
-                align_items='stretch',
-                overflow_y="scroll",
-                border="1px solid gray"))
-        self.group_handler()
-
-        # minimap ui
-        #self.mapw = Map(                                             # map widget
-        #    layers=(self.layero.layer, layer.points, bmap,), 
-        #    center=(layer.lat, layer.lon), 
-        #    zoom=zoom, width=mw)
-        #self.output = Output(layout={"width": ow})                   # Output widget 
-        #self.mapplotui = HBox([self.mapw, self.output])              # Map/plot ui        
-        
-        # selection ui (left panel) ---------------------- COMBINED
-        self.selectui = Box([
-            HTML("<b>Platform: </b>"),
-            self.platformtypes,
-            HTML("<b>Interval: </b>"),
-            self.interval,
-            HTML("<b>Datasets: </b>"),
-            self.chkbxoutput
-        ], layout=Layout(
-            width="20%",
-            display='flex',
-            flex_flow='column',
-            align_items='stretch'))
-
-        # --------------------------------------------------------------------
-        # ui
-        
-        self.output = Output(layout={"width": "auto"})
-        self.ui = HBox([self.selectui, self.output])
-        self.to_output()
-        
-    # ------------------------------------------------------------------------
-
-    ##### pppppppppppppppppppppppppppppppppppppppppp fixes needed
-    def type_handler(self, *args, **kwargs):
-        """ """
-        types = []
-        for t in self.platformtypes.children:
-            if t.value:
-                types.append(t.description)
-        print(types)
-        self.selected["type"] = types
-        self.group_handler()
-        self.to_output()
-    
-    
-    def group_handler(self, *args, **kwargs):
-        """ """
-        
-        types = self.selected["type"]
-        filtxr = self.xr.filter_by_attrs(type=lambda t: t in types)
-        self.checkboxes = get_checkboxes(filtxr, "dataset")
-        for c in self.checkboxes:
-            c.observe(self.group_chk_handler, names="value")
-        self.chkbxoutput.children = self.checkboxes
-        
-        
-    def group_chk_handler(self, *args, **kwargs):
-        """ """
-        selections = []
-        for c in self.checkboxes:
-            if c.value:
-                selections.append(c.description)
-        self.selected["groupoptions"] = selections
-        self.to_output()
-    ###      ---------------------------------------------- fixes needed    
-     
-     
-        
-    def options_handler(self, *args, **kwargs):
-        """ """
-        for n, w in {"interval": self.interval}.items():
-            self.selected[n] = w.value
-        self.to_output()
-        
-        
-    def to_output(self, *args, **kwargs):
-        """ """
-        self.output.clear_output()
-        
-        types = self.selected["type"]
-        
-        interval = self.interval.value
-        filtxr = self.xr.filter_by_attrs(type=lambda t: t in types)
-        
-        checked = self.selected["groupoptions"]
-        filtxr = filtxr[checked]
-
-        with self.output:
-            
-            units = get_options(filtxr, "units")
-            sources = get_options(filtxr, "source")
-
-            fig, axs = plt.subplots(
-                nrows=len(units), 
-                ncols=1, 
-                sharex=True, 
-                figsize=(15,10))
-            plt.subplots_adjust(hspace=0.000)
-
-            for i, u in enumerate(units):
-                ax = axs[i] if len(units)>1 else axs
-                x = filtxr.filter_by_attrs(units=u)
-                
-                if interval!="day":
-                    iv = "1"+self.intervals[interval]
-                    x = x.resample(time=iv).mean()
-
-                for n, d in x.items():
-                    d.mean("sample").plot.line(label=n, ax=ax, add_legend=False)
-
-                ax.set_xlabel(None)
-                ax.set_ylabel(str(u))
-                ax.set_title(None)
-                ax.legend(loc=0, framealpha=1)
-
-            plt.show()
-            
+       
             
 class JupyterSMV(object):
     """
@@ -804,13 +761,17 @@ class JupyterSMV(object):
     
     def __init__(self, primary=None, anc=None, session=None):
 
-        self.session = session
-
+        if session:
+            self.session = session
+        else:
+            raise("You must be logged with Earthdata to use this widget."
+                  "Login with the cell above, then run this cell again.")
+    
+        # -------------------------------------------------------------------
+        
         self.polys = LayerGroup()
         self.points = LayerGroup()
         self.apolys = LayerGroup()
-        
-        # -------------------------------------------------------------------
         
         self.mapw = Map(
             layers=(bmap, self.apolys, self.polys, self.points,), 
@@ -841,6 +802,8 @@ class JupyterSMV(object):
         self.body.set_title(0, '1. Download')
         self.body.set_title(1, '2. Plot')
         self.ui = VBox([self.head,  self.body])
+        
+        display(self.ui)
 
     def load_features(self, infeats):
         """ """
@@ -904,7 +867,7 @@ class JupyterSMV(object):
         self.progress.value = 0
         
         for s in sample:                           # loop over sample pts
-            s.submit(session=self.session)         # download the data
+            s.submit(self.session)                 # download the data
             self.progress.value += 1               # update progress bar
             s.update(**s.symbology)                # update style
         layer_row.layer.dl = True                  # set dl status to True
@@ -913,9 +876,7 @@ class JupyterSMV(object):
         layer_row.layer.xr = xrds
         self.layers.at[self.selected,"xr"] = xrds 
         self.body.selected_index = 1
-        
-        layer_row.layer.getui()
-        self.plotter = Plotter(layer_row.layer)
-        self.plotui.clear_output()
+
         with self.plotui:
-            display(self.plotter.ui)
+            Plotter(self.layers.iloc[i])
+

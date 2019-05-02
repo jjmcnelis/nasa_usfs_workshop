@@ -17,7 +17,7 @@ from IPython.display import display
 
 import ipyleaflet as mwg
 from ipyleaflet import Map, LayerGroup, GeoJSON, CircleMarker
-from ipywidgets import RadioButtons, Box, IntSlider, Dropdown, ToggleButton
+from ipywidgets import RadioButtons, Box, IntSlider, Dropdown, ToggleButton, GridBox
 from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML, interactive, SelectionRangeSlider
 
 

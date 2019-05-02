@@ -195,7 +195,7 @@ def split_pd(col):
     df = col.str.split(";",n=2,expand=True)           # split col by ;
     df = df.replace('', np.nan)                       # set '' to nan
     df = df.astype(float)                             # set all to float
-    df.columns = ["Max","Mean","Min"]                 # add column names
+    df.columns = ["Min","Mean","Max"]                 # add column names
     
     return(df)
 
@@ -549,11 +549,7 @@ class Plotter:
             ds = ds.groupby("year").apply(sfunc)
 
         self.plot_config = dfunc(ds, Interval=interval, Stack=stack)
-        try:
-            self.plotter()
-        except:
-            print("Something went wrong. Try again.")
-
+        self.plotter()
 
     def plotter(self):
         """ """
@@ -566,7 +562,10 @@ class Plotter:
             if xax==0: count0 += 1
             else: count1 += 1
             ax = self.ax0 if xax==0 else self.ax1
-            x.plot(ax=ax, **xargs)
+            try:
+                x.plot(ax=ax, **xargs)
+            except:
+                pass
         
         for c in fmt0: c(self.ax0)
         for c in fmt1: c(self.ax1)
@@ -698,15 +697,13 @@ class JupyterSMV(object):
         
         # -------------------------------------------------------------------
         
-        #self.plotui = Output()
         #self.body = Accordion(
         #    children=[self.downloadui, self.plotui], 
         #    layout=Layout(width="auto", height="80%"))
         #self.body.set_title(0, '1. Download')
         #self.body.set_title(1, '2. Plot')
-        #self.ui = VBox([self.head,  self.body])
-        
-        self.ui = self.downloadui
+        self.plotui = Output()
+        self.ui = VBox([self.downloadui,  self.plotui])
         display(self.ui)
 
     def load_features(self, infeats):
@@ -781,6 +778,6 @@ class JupyterSMV(object):
         self.layers.at[self.selected,"xr"] = xrds 
         #self.body.selected_index = 1
 
-        #with self.plotui:
-            #p = Plotter(self.layers.iloc[i])
-            #display(p.ui)
+        with self.plotui:
+            p = Plotter(self.layers.iloc[i])
+            display(p.ui)

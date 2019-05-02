@@ -20,7 +20,7 @@ class EarthdataLogin(requests.Session):
     
     REGISTER = HTML(                                 # registration prompt
         "<p style='font-weight:bold'><a href=https://urs.earthdata.nasa.gov"
-        "/users/new>Click here to register an Earthdata account.</a></p>")
+        "/users/new target='_blank'>Click here to register an Earthdata account.</a></p>")
                               
     
     def __init__(self):

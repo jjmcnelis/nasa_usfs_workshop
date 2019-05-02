@@ -333,6 +333,7 @@ def fDaymet(xrds, Interval=None, Stack=False):
             series[i][2]["x"] = Interval
     
     fmt0 = [lambda a: a.grid("on", alpha=0.5),
+            lambda a: a.set_xlabel(None),
             lambda a: a.legend(loc="upper left"),
             lambda a: a.set_ylabel("degrees Celsius")]
     fmt1 = [lambda a: a.legend(loc="upper right"), 
@@ -354,6 +355,7 @@ def fProductivity(xrds, Interval=None, Stack=False):
     
     fmt0 = [lambda a: a.grid("on", alpha=0.5),
             lambda a: a.legend(loc="upper left"),
+            lambda a: a.set_xlabel(None),
             lambda a: a.set_ylabel("g m-2 d-1")]
     fmt1 = [lambda a: a.set_title(None)]
 
@@ -386,6 +388,7 @@ def fSoilMoisture(xrds, Interval=None, Stack=False):
         series.append(p) 
     
     fmt0 = [lambda a: a.set_title(None),
+            lambda a: a.set_xlabel(None),
             lambda a: a.grid("on", alpha=0.5),
             lambda a: a.legend(loc="upper left"),
             lambda a: a.set_ylabel("soil moisture volume (m3/m3)")]
@@ -445,7 +448,7 @@ class Plotter:
         # --------------------------------------------------------------------
         # construct ui
         
-        self.fig, self.ax0 = plt.subplots(figsize=(7, 3.5))
+        self.fig, self.ax0 = plt.subplots(figsize=(6.5, 4))
         self.ax1 = self.ax0.twinx()
         self.fig.tight_layout(pad=2, h_pad=4)
             
@@ -469,7 +472,7 @@ class Plotter:
             layout=Layout(
                 width='100%',
                 grid_template_rows="auto",
-                grid_template_columns="30% 65%",
+                grid_template_columns="30% 70%",
                 grid_template_areas='''"self.mapw self.fig.canvas"'''))
         
         # --------------------------------------------------------------------        

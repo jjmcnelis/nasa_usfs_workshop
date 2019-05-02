@@ -42,24 +42,8 @@ smvdatasets = pd.read_csv(
 
 # usfs shapefile fields; only applies to Yaxing's workshop -->>
 fields = [
-    "FORESTNUMB","DISTRICTNU","REGION","GIS_ACRES","MIN","MEDIAN","MAX",
+    "FORESTNAME","FORESTNUMB","DISTRICTNA","DISTRICTNU","REGION","GIS_ACRES","MIN","MEDIAN","MAX",
     "RANGE","SUM","VARIETY","MINORITY","MAJORITY","COUNT"]
-
-site_details = """
-REGION:   {REGION}
-ACRES:    {GIS_ACRES}
-MIN:      {MIN}
-MEDIAN:   {MEDIAN}
-MAX:      {MAX}
-RANGE:    {RANGE}
-SUM:      {SUM}
-VARIETY:  {VARIETY}
-MINORITY: {MINORITY}
-MAJORITY: {MAJORITY}
-COUNT:    {COUNT}
-"""
-#{FORESTNAME} ({FORESTNUMB})
-#{DISTRICTNA} ({DISTRICTNU})
 
 numvalid = lambda v: np.count_nonzero(~np.isnan(v.data))
 allnan = lambda v: numvalid(v)==0
@@ -141,7 +125,7 @@ def poly_mapper(lyr, mw="25%", ow="75%", zoom=8):
     return((m,o))
 
 
-def get_colors(n, cmap=cm.Set3):
+def get_colors(n, cmap=cm.Set2):
     """ 
     Takes integer count of colors to map and optional kwarg: 
       'cmap=matplotlib.cm.<cmap>'.
@@ -382,11 +366,17 @@ def fSoilMoisture(xrds, Interval=None, Stack=False):
     fyear = lambda x: x.sel(year=np.unique(x.year)).mean("year")
     
     series = []
-    for d in ["surface", "rootzone"]:
-        ds = xrds.filter_by_attrs(soil_zone=d)
+    for k,v in {
+        "surface": dict(soil_zone="surface"), 
+        "rootzone": dict(soil_zone="surface"),
+        "in situ": dict(type="in situ"), 
+        "airborne": dict(type="airborne"),
+        "spaceborne": dict(type="spaceborne")}.items():
+
+        ds = xrds.filter_by_attrs(**v)
         ds = xr.concat(ds.values(), "mean").mean("mean")
         
-        p = [ds, 0, dict(label=d+" mean")]
+        p = [ds, 0, dict(label=k)]
         if (Stack)&(Interval!="year"):
             p[0] = fyear(ds)
             p[2]["x"] = Interval
@@ -452,13 +442,6 @@ class Plotter:
         self.stack = ToggleButton(description="Stack", value=False)
         self.stack.observe(self.update_stack, names="value")
         
-        self.dtrange = SelectionRangeSlider(
-            options=self.time,
-            value=[self.time[0], self.time[-1]],
-            continuous_update=False,
-            layout=Layout(width="50%"))
-        self.dtrange.observe(self.update_time, names="value")
-        
         # --------------------------------------------------------------------
         # construct ui
         
@@ -469,27 +452,25 @@ class Plotter:
         self.mapw = Map(
             layers=(self.layer.layer.layer, layer.points, bmap,), 
             center=(layer.lat, layer.lon), 
-            zoom=9, attribution_control=False)
+            zoom=8, attribution_control=False)
         for p in layer.points.layers:
             p.on_click(self.update_sample)
 
         self.selections = Box(
-            children=[self.dsel, self.intv, self.stack, self.dtrange], 
+            children=[self.dsel, self.intv, self.stack], 
             layout=Layout(
-                width="100%",
+                width="auto",
                 display='flex',
                 flex_flow='row',
                 align_items='stretch'))
         
-        self.outputs = GridBox(
-            children=[self.mapw, self.fig.canvas], 
+        self.ui = GridBox(
+            children=[VBox([self.selections, self.mapw]), self.fig.canvas], 
             layout=Layout(
                 width='100%',
                 grid_template_rows="auto",
-                grid_template_columns="25% 75%",
+                grid_template_columns="30% 70%",
                 grid_template_areas='''"self.mapw self.fig.canvas"'''))
-        
-        self.ui = VBox([self.selections, self.outputs])
         
         # --------------------------------------------------------------------        
         # trigger draw
@@ -509,17 +490,7 @@ class Plotter:
     def update_stack(self, change):
         """ """
         stack = change.new
-        if stack: 
-            self.dtrange.disabled = True
-        else: 
-            self.dtrange.disabled = False
         self.handler()
-
-    def update_time(self, change):
-        """ """
-        start, end = change.new
-        self.ax0.set_xlim(start, end)
-        self.fig.canvas.draw()
         
     def handler(self, change=None):
         """ """
@@ -547,7 +518,6 @@ class Plotter:
             ds.coords[interval] = getattr(ds.time.dt, stackstr)
             ds = ds.groupby("year").apply(sfunc)
 
-        #time = [d.isnull().all().astype("int") for d in ds.values()]
         self.plot_config = dfunc(ds, Interval=interval, Stack=stack)
         self.plotter()
 
@@ -561,15 +531,12 @@ class Plotter:
             x, xax, xargs = s
             if xax==0: count0 += 1
             else: count1 += 1
-            #minx.append(x.to_series().first_valid_index())
-            #maxx.append(x.to_series().last_valid_index())
             ax = self.ax0 if xax==0 else self.ax1
             try:
                 x.plot(ax=ax, **xargs)
             except:
                 pass
 
-        #self.dtrange.value = [min(minx), max(maxx)]
         for c in fmt0: c(self.ax0)
         for c in fmt1: c(self.ax1)
         if count1==0: self.ax1.axis("off")
@@ -658,10 +625,12 @@ class JupyterSMV(object):
     App.
     """
 
-    complete = False
     head = HTML("""
-    <h3>Soil Moisture Visualizer</h3>
-    <p>Do such and such.</br>1. </br>a. </br>2. </br>b.</p>
+    <h3>Batch download Soil Moisture Visualizer datasets for USFS sites:</h3>
+    <p>1. Click a polygon on the map.</br>2. Hit submit. </br></br>
+    Download locations with an ORANGE dot have in situ observations and those
+    with blue stroke have airborne observations. All locations have SMAP
+    coverage after ~2016.</p>
     """)
     
     
@@ -696,16 +665,11 @@ class JupyterSMV(object):
             self.load_features(primary)               # load input features
         if anc:
             self.load_ancillary(anc)
-        dllayout = [self.mapw, HBox([self.submit, self.progress])]
+        dllayout = [self.head, self.mapw, HBox([self.submit, self.progress])]
         self.downloadui = VBox(dllayout)# + [HBox([self.out1, self.out2])])
         
         # -------------------------------------------------------------------
-        
-        #self.body = Accordion(
-        #    children=[self.downloadui, self.plotui], 
-        #    layout=Layout(width="auto", height="80%"))
-        #self.body.set_title(0, '1. Download')
-        #self.body.set_title(1, '2. Plot')
+
         self.plotui = Output()
         self.ui = VBox([self.downloadui,  self.plotui])
         display(self.ui)
@@ -780,10 +744,7 @@ class JupyterSMV(object):
         xrds = xr.concat([s.xr for s in sample], "sample") # make xr dataset
         layer_row.layer.xr = xrds
         self.layers.at[self.selected,"xr"] = xrds 
-        #self.body.selected_index = 1
 
-        if not self.complete:                      # hack fix; only allow 1 run
-            with self.plotui:
-                p = Plotter(self.layers.iloc[i])
-                display(p.ui)
-        self.complete = True
+        with self.plotui:
+            p = Plotter(self.layers.iloc[i])
+            display(p.ui)

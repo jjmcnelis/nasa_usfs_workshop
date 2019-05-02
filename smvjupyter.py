@@ -16,9 +16,9 @@ from matplotlib import cm, colors
 from IPython.display import display
 
 import ipyleaflet as mwg
-from ipyleaflet import Map, LayerGroup, GeoJSON, CircleMarker, WidgetControl
-from ipywidgets import RadioButtons, Checkbox, Box, Accordion, IntSlider, Text, Dropdown, ToggleButton, GridBox
-from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML, interactive, Image, SelectionRangeSlider
+from ipyleaflet import Map, LayerGroup, GeoJSON, CircleMarker
+from ipywidgets import RadioButtons, Box, IntSlider, Dropdown, ToggleButton
+from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML, interactive, SelectionRangeSlider
 
 
 disabled_sources =  ["FLUXNET", "MODIS", "GRACE"]
@@ -504,7 +504,6 @@ class Plotter:
     
     def update_dataset(self, change):
         """ """
-        self.dtrange.value = [self.time[0], self.time[-1]]
         self.handler()
     
     def update_stack(self, change):
@@ -548,6 +547,7 @@ class Plotter:
             ds.coords[interval] = getattr(ds.time.dt, stackstr)
             ds = ds.groupby("year").apply(sfunc)
 
+        #time = [d.isnull().all().astype("int") for d in ds.values()]
         self.plot_config = dfunc(ds, Interval=interval, Stack=stack)
         self.plotter()
 
@@ -556,17 +556,20 @@ class Plotter:
         self.ax0.clear(); self.ax1.clear()
         
         series, fmt0, fmt1 = self.plot_config
-        count0,count1 = 0,0
+        minx, maxx, count0, count1 = 0,0,0,0
         for i, s in enumerate(series):
             x, xax, xargs = s
             if xax==0: count0 += 1
             else: count1 += 1
+            #minx.append(x.to_series().first_valid_index())
+            #maxx.append(x.to_series().last_valid_index())
             ax = self.ax0 if xax==0 else self.ax1
             try:
                 x.plot(ax=ax, **xargs)
             except:
                 pass
-        
+
+        #self.dtrange.value = [min(minx), max(maxx)]
         for c in fmt0: c(self.ax0)
         for c in fmt1: c(self.ax1)
         if count1==0: self.ax1.axis("off")
@@ -655,6 +658,7 @@ class JupyterSMV(object):
     App.
     """
 
+    complete = False
     head = HTML("""
     <h3>Soil Moisture Visualizer</h3>
     <p>Do such and such.</br>1. </br>a. </br>2. </br>b.</p>
@@ -778,6 +782,8 @@ class JupyterSMV(object):
         self.layers.at[self.selected,"xr"] = xrds 
         #self.body.selected_index = 1
 
-        with self.plotui:
-            p = Plotter(self.layers.iloc[i])
-            display(p.ui)
+        if not self.complete:                      # hack fix; only allow 1 run
+            with self.plotui:
+                p = Plotter(self.layers.iloc[i])
+                display(p.ui)
+        self.complete = True

@@ -259,7 +259,7 @@ def get_layer_data(i, feat, col="#FFFFFF", opac=0.4, samp=True):
         "id": i, 
         "style": {
             "weight": 0.75,
-            "color": col,
+            "color": "aliceblue",
             "fillColor": col,
             "fillOpacity": opac}})
 
@@ -469,7 +469,7 @@ class Plotter:
             layout=Layout(
                 width='100%',
                 grid_template_rows="auto",
-                grid_template_columns="30% 70%",
+                grid_template_columns="30% 65%",
                 grid_template_areas='''"self.mapw self.fig.canvas"'''))
         
         # --------------------------------------------------------------------        

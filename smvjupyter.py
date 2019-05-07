@@ -21,8 +21,8 @@ from ipywidgets import RadioButtons, Box, IntSlider, Dropdown, ToggleButton, Gri
 from ipywidgets import Layout, Button, IntProgress, Output, HBox, VBox, HTML, interactive, SelectionRangeSlider
 
 
-disabled_sources =  ["FLUXNET", "MODIS", "GRACE"]
-ignore_variables = ["sample","time","stat","lat","lon"] # "PBOH2O"
+disabled_sources =  ["FLUXNET", "MODIS", "GRACE", "PBOH2O"]
+ignore_variables = ["sample","time","stat","lat","lon"]
 
 # ----------------------------------------------------------------------------
 # app settings

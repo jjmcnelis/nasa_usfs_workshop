@@ -29,3 +29,4 @@ ET,MODIS,spaceborne,mm/8day,Evapotranspiration,not applicable,not applicable,500
 LST_Day,MODIS,spaceborne,K/8day,Land Surface Temperature Day,not applicable,not applicable,1000-m,2000-present
 LST_Night,MODIS,spaceborne,K/8day,Land Surface Temperature Night,not applicable,not applicable,1000-m,2000-present
 EVI,MODIS,spaceborne,unitless,16 days Enhanced Vegetation Index,not applicable,not applicable,250-m,2000-present
+PBOH2O_surface,PBOH2O,in situ,m3/m3,Mean vol (%) soil moisture at 0-5cm ,surface,0-5 cm,point,2006-2017

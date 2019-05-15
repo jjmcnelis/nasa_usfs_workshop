@@ -32,8 +32,6 @@ plt.clf()
 font = {'family': 'normal', 'weight': 'normal', 'size': 8}
 plt.rc('font', **font)
 
-warnings.filterwarnings('ignore')
-
 smvdownload = "https://airmoss.ornl.gov/cgi-bin/viz/api/download.pl?"
 smvdatasets = pd.read_csv(
     "docs/smvdatasets.csv", 
@@ -167,7 +165,12 @@ def txt_to_pd(response_text):
     
     f = StringIO(response_text)                      # get file from string
 
-    df = pd.read_csv(f, header=4, index_col="time")  # read to df
+    df = pd.read_csv(
+        f, 
+        header=4, 
+        index_col="time",
+        error_bad_lines=False, 
+        warn_bad_lines=False)                        # read to df
     df.index = pd.to_datetime(df.index)              # convert index to dates
     
     return(df)

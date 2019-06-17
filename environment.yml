@@ -13,4 +13,5 @@ dependencies:
   - shapely
   - matplotlib
   - ipympl
+  - folium
   

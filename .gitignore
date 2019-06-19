@@ -1,3 +1,7 @@
+# mine
+docs/misc/*
+backup/
+*.nc
 *.pkl
 
 # Byte-compiled / optimized / DLL files
@@ -123,7 +127,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-# mine
-backup/
-*.nc
